@@ -383,7 +383,14 @@ Contribuições são bem-vindas! Sinta-se à vontade para:
 
 ## 📝 Licença
 
-Este projeto é livre para uso educacional.
+Este projeto está licenciado sob a **Licença MIT** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+### O que isso significa:
+- ✅ **Livre para usar** em aprendizado, educação e projetos comerciais
+- ✅ **Livre para modificar** e adaptar às suas necessidades
+- ✅ **Livre para distribuir** e compartilhar
+- ⚠️ **Sem garantias** - use por sua conta e risco
+- 📝 **Atribuição apreciada** mas não obrigatória
 
 ## 👨‍💻 Autor
 

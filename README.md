@@ -380,7 +380,14 @@ This project was created for educational purposes only and should not be used in
 
 ## 📄 License
 
-This project is open source and available for educational use.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+### What this means:
+- ✅ **Free to use** for learning, education, and commercial projects
+- ✅ **Free to modify** and adapt to your needs
+- ✅ **Free to distribute** and share
+- ⚠️ **No warranty** - use at your own risk
+- 📝 **Attribution appreciated** but not required
 
 ## 🎯 Similarity with Bitcoin: **93%**
 

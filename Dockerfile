@@ -22,8 +22,8 @@ RUN make build
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS and netcat for healthcheck
+RUN apk --no-cache add ca-certificates netcat-openbsd
 
 # Create app user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -48,6 +48,5 @@ ENV BLOCKCHAIN_DATA_DIR=/app/data
 ENV NODE_PORT=3000
 
 # Default command
-ENTRYPOINT ["/app/blockchain"]
-CMD ["--help"]
+CMD ["/app/blockchain"]
 

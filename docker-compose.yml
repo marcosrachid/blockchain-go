@@ -13,13 +13,24 @@ services:
     networks:
       blockchain-net:
         ipv4_address: 172.20.0.2
-    command: startnode -port 3000
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        if [ ! -d /app/data/blocks ]; then
+          echo 'Creating initial blockchain...'
+          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          SEED_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          /app/blockchain createblockchain -address $$SEED_ADDRESS
+        fi
+        exec /app/blockchain startnode -port 3000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      test: ["CMD-SHELL", "nc -z localhost 3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
 
   # Mining node 1
   node-miner1:
@@ -34,14 +45,21 @@ services:
       blockchain-net:
         ipv4_address: 172.20.0.3
     depends_on:
-      - node-seed
+      node-seed:
+        condition: service_healthy
     environment:
       - SEED_NODE=172.20.0.2:3000
-    command: >
-      sh -c "sleep 5 && 
-             /app/blockchain createwallet > /tmp/wallet.txt 2>&1 && 
-             MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4) &&
-             /app/blockchain startnode -port 3001 -miner $$MINER_ADDRESS"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+        MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+        if [ ! -d /app/data/blocks ]; then
+          echo 'Creating blockchain for miner1...'
+          /app/blockchain createblockchain -address $$MINER_ADDRESS
+        fi
+        exec /app/blockchain startnode -port 3001 -miner $$MINER_ADDRESS
     restart: unless-stopped
 
   # Mining node 2
@@ -57,14 +75,21 @@ services:
       blockchain-net:
         ipv4_address: 172.20.0.4
     depends_on:
-      - node-seed
+      node-seed:
+        condition: service_healthy
     environment:
       - SEED_NODE=172.20.0.2:3000
-    command: >
-      sh -c "sleep 5 && 
-             /app/blockchain createwallet > /tmp/wallet.txt 2>&1 && 
-             MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4) &&
-             /app/blockchain startnode -port 3002 -miner $$MINER_ADDRESS"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+        MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+        if [ ! -d /app/data/blocks ]; then
+          echo 'Creating blockchain for miner2...'
+          /app/blockchain createblockchain -address $$MINER_ADDRESS
+        fi
+        exec /app/blockchain startnode -port 3002 -miner $$MINER_ADDRESS
     restart: unless-stopped
 
   # Regular node (non-mining)
@@ -80,11 +105,21 @@ services:
       blockchain-net:
         ipv4_address: 172.20.0.5
     depends_on:
-      - node-seed
+      node-seed:
+        condition: service_healthy
     environment:
       - SEED_NODE=172.20.0.2:3000
-    command: >
-      sh -c "sleep 5 && /app/blockchain startnode -port 3003"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        if [ ! -d /app/data/blocks ]; then
+          echo 'Creating blockchain for regular node...'
+          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          REG_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          /app/blockchain createblockchain -address $$REG_ADDRESS
+        fi
+        exec /app/blockchain startnode -port 3003
     restart: unless-stopped
 
 networks:

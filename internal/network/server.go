@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 
 	"github.com/marcocsrachid/blockchain-go/internal/blockchain"
 )
@@ -21,10 +22,18 @@ const (
 var (
 	nodeAddress     string
 	miningAddress   string
-	knownNodes      = []string{"localhost:3000"} // Seed node
+	knownNodes      = initKnownNodes()
 	blocksInTransit = [][]byte{}
 	memoryPool      = make(map[string]*blockchain.Transaction)
 )
+
+// initKnownNodes initializes known nodes from environment or default
+func initKnownNodes() []string {
+	if seedNode := os.Getenv("SEED_NODE"); seedNode != "" {
+		return []string{seedNode}
+	}
+	return []string{"localhost:3000"} // Default seed node
+}
 
 // Server represents the network server
 type Server struct {

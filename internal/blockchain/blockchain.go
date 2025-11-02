@@ -13,10 +13,18 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
-const (
-	dbPath      = "./tmp/blocks"
+var (
+	dbPath      = getDBPath()
 	genesisData = "First Transaction from Genesis"
 )
+
+// getDBPath returns the database path, checking environment variable first
+func getDBPath() string {
+	if path := os.Getenv("BLOCKCHAIN_DATA_DIR"); path != "" {
+		return path + "/blocks"
+	}
+	return "./tmp/blocks"
+}
 
 type Blockchain struct {
 	LastHash []byte

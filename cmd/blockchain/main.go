@@ -311,7 +311,7 @@ func (cli *CommandLine) run() {
 	}
 
 	if startNodeCmd.Parsed() {
-		nodeAddress := fmt.Sprintf("localhost:%s", *startNodePort)
+		nodeAddress := fmt.Sprintf("0.0.0.0:%s", *startNodePort)
 		cli.startNode(*startNodeMiner, nodeAddress)
 	}
 

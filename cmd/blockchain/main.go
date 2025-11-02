@@ -140,7 +140,11 @@ func (cli *CommandLine) send(from, to string, amount int) {
 	defer chain.Database.Close()
 
 	tx := blockchain.NewTransaction(from, to, amount, chain)
-	cbTx := blockchain.CoinbaseTX(from, "")
+	
+	// Get current height for coinbase reward calculation
+	newHeight := chain.GetBestHeight() + 1
+	cbTx := blockchain.CoinbaseTX(from, "", newHeight)
+	
 	txs := []*blockchain.Transaction{cbTx, tx}
 	block := chain.MineBlock(txs)
 	UTXOSet.Update(block)

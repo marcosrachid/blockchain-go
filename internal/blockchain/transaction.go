@@ -40,7 +40,7 @@ type TXOutputs struct {
 	Outputs []TXOutput
 }
 
-const subsidy = 50 // Mining reward (similar to Bitcoin's initial 50 BTC)
+// Mining reward and supply constants are now in config.go
 
 // Hash returns the transaction hash
 func (tx *Transaction) Hash() []byte {
@@ -80,7 +80,8 @@ func DeserializeTransaction(data []byte) Transaction {
 
 // CoinbaseTX creates a coinbase transaction (mining reward)
 // Has no inputs, only outputs
-func CoinbaseTX(to, data string) *Transaction {
+// The reward is calculated based on block height (halving)
+func CoinbaseTX(to, data string, height int) *Transaction {
 	if data == "" {
 		randData := make([]byte, 24)
 		_, err := rand.Read(randData)
@@ -90,8 +91,10 @@ func CoinbaseTX(to, data string) *Transaction {
 		data = fmt.Sprintf("%x", randData)
 	}
 
+	reward := GetBlockReward(height)
+	
 	txin := TXInput{[]byte{}, -1, nil, []byte(data)}
-	txout := NewTXOutput(subsidy, to)
+	txout := NewTXOutput(reward, to)
 
 	tx := Transaction{nil, []TXInput{txin}, []TXOutput{*txout}}
 	tx.ID = tx.Hash()

@@ -10,7 +10,7 @@ import (
 	"math/big"
 )
 
-const Difficulty = 18
+// Difficulty is now defined in config.go
 
 type ProofOfWork struct {
 	Block  *Block

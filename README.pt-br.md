@@ -317,9 +317,9 @@ type Transaction struct {
 ## 📂 Documentação
 
 - [README.md](README.md) - Documentação principal (English)
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Arquitetura do projeto
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Arquitetura do projeto
 - [PROJECT_STATUS.md](PROJECT_STATUS.md) - Status e estatísticas
-- [QUICKSTART_NETWORK.md](QUICKSTART_NETWORK.md) - Guia rápido de rede
+- [QUICKSTART_NETWORK.md](docs/QUICKSTART_NETWORK.md) - Guia rápido de rede
 - [docs/BITCOIN_COMPARISON.md](docs/BITCOIN_COMPARISON.md) - Comparação com Bitcoin
 - [docs/NETWORK.pt-br.md](docs/NETWORK.pt-br.md) - Documentação da rede (Português)
 - [docs/TUTORIAL.pt-br.md](docs/TUTORIAL.pt-br.md) - Tutorial completo (Português)

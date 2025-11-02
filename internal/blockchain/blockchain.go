@@ -13,17 +13,15 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
-var (
-	dbPath      = getDBPath()
-	genesisData = "First Transaction from Genesis"
-)
+// Database path configuration (uses constant from config.go)
+var dbPath = getDBPath()
 
 // getDBPath returns the database path, checking environment variable first
 func getDBPath() string {
 	if path := os.Getenv("BLOCKCHAIN_DATA_DIR"); path != "" {
 		return path + "/blocks"
 	}
-	return "./tmp/blocks"
+	return DBPath // Use constant from config.go
 }
 
 type Blockchain struct {
@@ -56,7 +54,7 @@ func InitBlockchain(address string) *Blockchain {
 	err = db.Update(func(txn *badger.Txn) error {
 		if _, err := txn.Get([]byte("lh")); err == badger.ErrKeyNotFound {
 			fmt.Println("No existing blockchain found")
-			cbtx := CoinbaseTX(address, genesisData)
+			cbtx := CoinbaseTX(address, GenesisData, 0) // Genesis block is height 0
 			genesis := Genesis(cbtx)
 			fmt.Println("Genesis created")
 			err = txn.Set(genesis.Hash, genesis.Serialize())
@@ -118,6 +116,26 @@ func ContinueBlockchain(address string) *Blockchain {
 	chain := Blockchain{lastHash, db}
 
 	return &chain
+}
+
+// GetBestHeight returns the height of the latest block in the chain
+func (chain *Blockchain) GetBestHeight() int {
+	var lastBlock Block
+
+	err := chain.Database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(chain.LastHash)
+		if err != nil {
+			return err
+		}
+		err = item.Value(func(val []byte) error {
+			lastBlock = *Deserialize(val)
+			return nil
+		})
+		return err
+	})
+	Handle(err)
+
+	return lastBlock.Height
 }
 
 // MineBlock mines a new block with the provided transactions

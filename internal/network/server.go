@@ -516,7 +516,9 @@ func (s *Server) mineTransactions() {
 		return
 	}
 
-	cbTx := blockchain.CoinbaseTX(miningAddress, "")
+	// Get current height for coinbase reward calculation
+	newHeight := s.Blockchain.GetBestHeight() + 1
+	cbTx := blockchain.CoinbaseTX(miningAddress, "", newHeight)
 	txs = append(txs, cbTx)
 
 	newBlock := s.Blockchain.MineBlock(txs)

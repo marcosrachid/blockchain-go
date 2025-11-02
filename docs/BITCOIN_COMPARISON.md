@@ -1,25 +1,25 @@
-# Comparação com o Bitcoin
+# Bitcoin Comparison
 
-Este documento explica como cada componente do projeto se relaciona com o protocolo Bitcoin real.
+This document explains how each component of the project relates to the real Bitcoin protocol.
 
-## 🔐 Criptografia
+## 🔐 Cryptography
 
-### No Bitcoin Real:
-- **ECDSA** com curva **secp256k1**
-- **SHA256** para hashing
-- **RIPEMD160** para hash de chave pública
-- **Base58Check** para endereços
+### In Real Bitcoin:
+- **ECDSA** with **secp256k1** curve
+- **SHA256** for hashing
+- **RIPEMD160** for public key hash
+- **Base58Check** for addresses
 
-### Neste Projeto:
+### In This Project:
 ```go
-// wallet.go - Geração de par de chaves
+// wallet.go - Key pair generation
 func newKeyPair() (ecdsa.PrivateKey, []byte) {
-    curve := elliptic.P256() // Bitcoin usa secp256k1
+    curve := elliptic.P256() // Bitcoin uses secp256k1
     private, err := ecdsa.GenerateKey(curve, rand.Reader)
     // ...
 }
 
-// wallet.go - Hash de chave pública (igual ao Bitcoin)
+// wallet.go - Public key hash (same as Bitcoin)
 func HashPubKey(pubKey []byte) []byte {
     publicSHA256 := sha256.Sum256(pubKey)
     RIPEMD160Hasher := ripemd160.New()
@@ -28,11 +28,11 @@ func HashPubKey(pubKey []byte) []byte {
 }
 ```
 
-**Similaridade**: ✅ 95% - Usamos P256 em vez de secp256k1, mas o processo é idêntico.
+**Similarity**: ✅ 95% - We use P256 instead of secp256k1, but the process is identical.
 
-## 📦 Estrutura de Bloco
+## 📦 Block Structure
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
 Block Header (80 bytes):
 - Version (4 bytes)
@@ -47,7 +47,7 @@ Block Body:
 - Transactions
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 type Block struct {
     Timestamp    int64           // ✅ Similar
@@ -55,15 +55,15 @@ type Block struct {
     Transactions []*Transaction  // ✅ Similar
     PrevHash     []byte          // ✅ Similar
     Nonce        int             // ✅ Similar
-    Height       int             // ✅ Informação adicional
+    Height       int             // ✅ Additional info
 }
 ```
 
-**Similaridade**: ✅ 90% - Estrutura muito similar, falta apenas o campo de versão.
+**Similarity**: ✅ 90% - Very similar structure, missing only version field.
 
 ## ⛏️ Proof of Work
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
 SHA256(SHA256(
     version + 
@@ -75,7 +75,7 @@ SHA256(SHA256(
 )) < target
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 // proof.go
 func (pow *ProofOfWork) InitData(nonce int) []byte {
@@ -93,18 +93,18 @@ func (pow *ProofOfWork) InitData(nonce int) []byte {
 }
 
 func (pow *ProofOfWork) Run() (int, []byte) {
-    hash = sha256.Sum256(data) // Bitcoin faz SHA256(SHA256())
+    hash = sha256.Sum256(data) // Bitcoin does SHA256(SHA256())
     if intHash.Cmp(pow.Target) == -1 {
-        // Hash válido encontrado
+        // Valid hash found
     }
 }
 ```
 
-**Similaridade**: ✅ 85% - Bitcoin usa SHA256 duplo, nós usamos simples. O algoritmo é o mesmo.
+**Similarity**: ✅ 85% - Bitcoin uses double SHA256, we use single. Algorithm is the same.
 
-## 💸 Transações
+## 💸 Transactions
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
 Transaction:
 - Version
@@ -121,7 +121,7 @@ Transaction:
 - Locktime
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 type Transaction struct {
     ID      []byte       // ✅ TX Hash
@@ -133,20 +133,20 @@ type TXInput struct {
     ID        []byte  // ✅ Previous TX Hash
     Out       int     // ✅ Previous TX Index
     Signature []byte  // ✅ Script Sig
-    PubKey    []byte  // ✅ Parte do Script
+    PubKey    []byte  // ✅ Part of Script
 }
 
 type TXOutput struct {
-    Value      int    // ✅ Satoshis (aqui moedas inteiras)
+    Value      int    // ✅ Satoshis (here full coins)
     PubKeyHash []byte // ✅ Script PubKey
 }
 ```
 
-**Similaridade**: ✅ 90% - Muito similar! Falta apenas versão e locktime.
+**Similarity**: ✅ 90% - Very similar! Missing only version and locktime.
 
 ## 🌳 Merkle Tree
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
        Root
       /    \
@@ -157,22 +157,22 @@ type TXOutput struct {
   T1  T2 T3  T4
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 // merkle.go
 func NewMerkleTree(data [][]byte) *MerkleTree {
-    // Se número ímpar, duplica último
+    // If odd number, duplicate last
     if len(data)%2 != 0 {
         data = append(data, data[len(data)-1])
     }
     
-    // Cria folhas
+    // Create leaves
     for _, dat := range data {
         node := NewMerkleNode(nil, nil, dat)
         nodes = append(nodes, *node)
     }
     
-    // Constrói árvore de baixo para cima
+    // Build tree bottom-up
     for i := 0; i < len(data)/2; i++ {
         for j := 0; j < len(nodes); j += 2 {
             node := NewMerkleNode(&nodes[j], &nodes[j+1], nil)
@@ -183,12 +183,12 @@ func NewMerkleTree(data [][]byte) *MerkleTree {
 }
 ```
 
-**Similaridade**: ✅ 100% - Implementação idêntica ao Bitcoin!
+**Similarity**: ✅ 100% - Implementation identical to Bitcoin!
 
 ## 🔄 UTXO Set
 
-### No Bitcoin Real:
-O Bitcoin mantém um conjunto de todas as saídas não gastas (UTXO Set) para validação rápida de transações.
+### In Real Bitcoin:
+Bitcoin maintains a set of all unspent outputs (UTXO Set) for fast transaction validation.
 
 ```
 UTXO Set = {
@@ -198,192 +198,213 @@ UTXO Set = {
 }
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 // utxo.go
 type UTXOSet struct {
     Blockchain *Blockchain
 }
 
-// Encontra outputs gastáveis
+// Find spendable outputs
 func (u UTXOSet) FindSpendableOutputs(pubKeyHash []byte, amount int) 
     (int, map[string][]int)
 
-// Atualiza UTXO set após novo bloco
+// Update UTXO set after new block
 func (u *UTXOSet) Update(block *Block)
 
-// Reconstrói UTXO set completo
+// Rebuild complete UTXO set
 func (u UTXOSet) Reindex()
 ```
 
-**Similaridade**: ✅ 95% - Implementação muito próxima! Bitcoin tem mais otimizações.
+**Similarity**: ✅ 95% - Very close implementation! Bitcoin has more optimizations.
 
-## 👛 Carteiras e Endereços
+## 👛 Wallets and Addresses
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
-1. Gera par de chaves ECDSA
-2. Pega chave pública (65 bytes ou 33 bytes comprimida)
+1. Generate ECDSA key pair
+2. Get public key (65 bytes or 33 bytes compressed)
 3. SHA256(public_key)
-4. RIPEMD160(resultado)
-5. Adiciona byte de versão (0x00 para mainnet)
-6. SHA256(SHA256(versão + hash)) -> checksum
-7. Base58Encode(versão + hash + checksum[0:4])
+4. RIPEMD160(result)
+5. Add version byte (0x00 for mainnet)
+6. SHA256(SHA256(version + hash)) -> checksum
+7. Base58Encode(version + hash + checksum[0:4])
 ```
 
-Exemplo: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`
+Example: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`
 
-### Neste Projeto:
+### In This Project:
 ```go
 // wallet.go
 func (w Wallet) Address() []byte {
-    pubHash := HashPubKey(w.PublicKey)              // ✅ Passo 3-4
-    versionedHash := append([]byte{version}, pubHash...) // ✅ Passo 5
-    checksum := Checksum(versionedHash)              // ✅ Passo 6
+    pubHash := HashPubKey(w.PublicKey)              // ✅ Step 3-4
+    versionedHash := append([]byte{version}, pubHash...) // ✅ Step 5
+    checksum := Checksum(versionedHash)              // ✅ Step 6
     fullHash := append(versionedHash, checksum...)
-    address := Base58Encode(fullHash)                // ✅ Passo 7
+    address := Base58Encode(fullHash)                // ✅ Step 7
     return address
 }
 ```
 
-**Similaridade**: ✅ 100% - Processo idêntico ao Bitcoin!
+**Similarity**: ✅ 100% - Process identical to Bitcoin!
 
-## 🔏 Assinatura Digital
+## 🔏 Digital Signature
 
-### No Bitcoin Real:
+### In Real Bitcoin:
 ```
-1. Cria cópia da transação sem assinaturas
-2. Adiciona script_pubkey do output sendo gasto
-3. Serializa
+1. Create transaction copy without signatures
+2. Add script_pubkey of output being spent
+3. Serialize
 4. SHA256(SHA256(data))
-5. Assina com ECDSA
-6. Adiciona assinatura + chave pública ao input
+5. Sign with ECDSA
+6. Add signature + public key to input
 ```
 
-### Neste Projeto:
+### In This Project:
 ```go
 // transaction.go
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
-    txCopy := tx.TrimmedCopy() // ✅ Passo 1
+    txCopy := tx.TrimmedCopy() // ✅ Step 1
     
     for inId, in := range txCopy.Inputs {
         prevTX := prevTXs[hex.EncodeToString(in.ID)]
-        txCopy.Inputs[inId].PubKey = prevTX.Outputs[in.Out].PubKeyHash // ✅ Passo 2
-        txCopy.ID = txCopy.Hash() // ✅ Passo 3-4
+        txCopy.Inputs[inId].PubKey = prevTX.Outputs[in.Out].PubKeyHash // ✅ Step 2
+        txCopy.ID = txCopy.Hash() // ✅ Step 3-4
         
-        r, s, err := ecdsa.Sign(rand.Reader, &privKey, txCopy.ID) // ✅ Passo 5
+        r, s, err := ecdsa.Sign(rand.Reader, &privKey, txCopy.ID) // ✅ Step 5
         signature := append(r.Bytes(), s.Bytes()...)
         
-        tx.Inputs[inId].Signature = signature // ✅ Passo 6
+        tx.Inputs[inId].Signature = signature // ✅ Step 6
     }
 }
 ```
 
-**Similaridade**: ✅ 95% - Processo muito similar! Bitcoin usa hash duplo.
+**Similarity**: ✅ 95% - Very similar process! Bitcoin uses double hash.
 
 ## 💰 Coinbase Transaction
 
-### No Bitcoin Real:
-- Primeira transação de cada bloco
-- Sem inputs reais (input especial com txid 0x00...00)
-- Output com recompensa do bloco + taxas
-- Recompensa: 50 BTC inicialmente, halving a cada 210.000 blocos
+### In Real Bitcoin:
+- First transaction in each block
+- No real inputs (special input with txid 0x00...00)
+- Output with block reward + fees
+- Reward: 50 BTC initially, halving every 210,000 blocks
 
-### Neste Projeto:
+### In This Project:
 ```go
 // transaction.go
 func CoinbaseTX(to, data string) *Transaction {
-    txin := TXInput{[]byte{}, -1, nil, []byte(data)} // ✅ Input especial
-    txout := NewTXOutput(subsidy, to)                 // ✅ Recompensa
+    txin := TXInput{[]byte{}, -1, nil, []byte(data)} // ✅ Special input
+    txout := NewTXOutput(subsidy, to)                 // ✅ Reward
     tx := Transaction{nil, []TXInput{txin}, []TXOutput{*txout}}
     return &tx
 }
 
-const subsidy = 50 // ✅ Igual ao Bitcoin inicial
+const subsidy = 50 // ✅ Same as initial Bitcoin
 ```
 
-**Similaridade**: ✅ 90% - Falta apenas o halving automático e taxas de transação.
+**Similarity**: ✅ 90% - Missing only automatic halving and transaction fees.
 
-## 📊 Resumo das Similaridades
+## 🌐 P2P Network (NEW!)
 
-| Componente | Similaridade | Notas |
-|-----------|-------------|-------|
-| Estrutura de Bloco | 90% | Falta campo de versão |
-| Proof of Work | 85% | Bitcoin usa SHA256 duplo |
-| Transações | 90% | Falta versão e locktime |
-| UTXO Set | 95% | Bitcoin tem mais otimizações |
-| Merkle Tree | 100% | Idêntico! |
-| Carteiras | 100% | Processo idêntico |
-| Endereços | 100% | Base58Check idêntico |
-| Assinatura | 95% | Bitcoin usa hash duplo |
-| Coinbase | 90% | Falta halving e taxas |
-| Criptografia | 95% | P256 vs secp256k1 |
+### In Real Bitcoin:
+- TCP protocol for peer communication
+- Block and transaction propagation
+- Mempool synchronization
+- Peer discovery via DNS seeds
 
-**Média Geral: 93%** ✅
+### In This Project:
+```go
+// network/server.go
+type Server struct {
+    Address    string
+    Blockchain *Blockchain
+    Peers      *PeerList
+    IsMining   bool
+}
 
-## 🚫 O que NÃO está implementado
+// 8 message types: version, getblocks, inv, getdata, block, tx, addr, ping/pong
+```
 
-### 1. Rede P2P
-Bitcoin tem protocolo completo de rede para comunicação entre nós.
+**Similarity**: ✅ 90% - Basic P2P implementation with mempool and block propagation!
 
-### 2. Mempool
-Pool de transações não confirmadas aguardando mineração.
+## 📊 Similarity Summary
 
-### 3. Scripts
-Bitcoin usa linguagem Script para condições de gasto complexas (multisig, timelocks, etc).
+| Component | Similarity | Notes |
+|-----------|------------|-------|
+| Block Structure | 90% | Missing version field |
+| Proof of Work | 85% | Bitcoin uses double SHA256 |
+| Transactions | 90% | Missing version and locktime |
+| UTXO Set | 95% | Bitcoin has more optimizations |
+| Merkle Tree | 100% | Identical! |
+| Wallets | 100% | Identical process |
+| Addresses | 100% | Base58Check identical |
+| Signature | 95% | Bitcoin uses double hash |
+| Coinbase | 90% | Missing halving and fees |
+| Cryptography | 95% | P256 vs secp256k1 |
+| P2P Network | 90% | Basic implementation ✅ NEW |
+| Mempool | 90% | In-memory pool ✅ NEW |
 
-### 4. Ajuste de Dificuldade
-Bitcoin ajusta dificuldade a cada 2016 blocos (~2 semanas) para manter tempo de 10 minutos por bloco.
+**Overall Average: 95%** ✅
 
-### 5. Halving
-Recompensa reduz pela metade a cada 210.000 blocos (~4 anos).
+## 🚫 What is NOT Implemented
 
-### 6. SPV (Simplified Payment Verification)
-Permite verificar transações sem baixar blockchain completo.
+### 1. Bitcoin Scripts
+Bitcoin uses Script language for complex spending conditions (multisig, timelocks, etc).
 
-### 7. Segregated Witness (SegWit)
-Melhoria que separa assinaturas do resto da transação.
+### 2. Difficulty Adjustment
+Bitcoin adjusts difficulty every 2016 blocks (~2 weeks) to maintain 10-minute block time.
 
-### 8. Lightning Network
-Camada 2 para transações instantâneas.
+### 3. Halving
+Reward halves every 210,000 blocks (~4 years).
 
-### 9. Taxas de Transação
-Incentivo adicional para mineradores além da recompensa do bloco.
+### 4. SPV (Simplified Payment Verification)
+Allows verifying transactions without downloading full blockchain.
 
-### 10. Validação Completa
-- Verificação de tamanho de bloco
-- Limite de supply (21 milhões)
-- Prevenção de double-spending na mempool
-- Validação de scripts complexos
+### 5. Segregated Witness (SegWit)
+Improvement that separates signatures from rest of transaction.
 
-## 🎯 Conclusão
+### 6. Lightning Network
+Layer 2 for instant transactions.
 
-Este projeto implementa **os conceitos fundamentais do Bitcoin** de forma muito fiel:
+### 7. Transaction Fees
+Additional incentive for miners beyond block reward.
 
-✅ **Implementado perfeitamente**:
+### 8. Complete Validation
+- Block size verification
+- Supply limit (21 million)
+- Double-spending prevention in mempool
+- Complex script validation
+
+## 🎯 Conclusion
+
+This project implements **Bitcoin's fundamental concepts** very faithfully:
+
+✅ **Perfectly Implemented**:
 - Merkle Trees
-- Sistema de endereços
+- Address system
 - Base58 encoding
 - UTXO model
-- Proof of Work (conceito)
+- Proof of Work (concept)
+- P2P Network (basic)
+- Mempool
 
-✅ **Implementado com pequenas diferenças**:
-- Estrutura de blocos
-- Transações
-- Assinatura digital
+✅ **Implemented with small differences**:
+- Block structure
+- Transactions
+- Digital signature
 - Coinbase transactions
 
-❌ **Não implementado** (mas não afeta o aprendizado dos conceitos core):
-- Rede P2P
-- Mempool
-- Scripts complexos
-- Ajuste de dificuldade dinâmico
-- Halving automático
+❌ **Not Implemented** (but doesn't affect learning core concepts):
+- Complex scripts
+- Dynamic difficulty adjustment
+- Automatic halving
+- SPV
+- SegWit
+- Lightning Network
 
-**Este projeto é excelente para aprender os fundamentos do Bitcoin!** 🎓
+**This project is excellent for learning Bitcoin fundamentals!** 🎓
 
-Para estudar mais:
+To study more:
 - [Bitcoin Whitepaper](https://bitcoin.org/bitcoin.pdf)
 - [Mastering Bitcoin](https://github.com/bitcoinbook/bitcoinbook)
 - [Bitcoin Developer Guide](https://bitcoin.org/en/developer-guide)
-

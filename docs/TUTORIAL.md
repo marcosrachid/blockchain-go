@@ -1,329 +1,339 @@
-# Tutorial: Primeiros Passos com o Blockchain
+# Tutorial: Getting Started with the Blockchain
 
-Este tutorial mostrará como usar o blockchain passo a passo.
+> **Versão em Português**: [TUTORIAL.pt-br.md](TUTORIAL.pt-br.md)
 
-## Passo 1: Compilar o Projeto
+This tutorial will show you how to use the blockchain step by step.
+
+## Step 1: Build the Project
 
 ```bash
+# Navigate to project directory
+cd blockchain-go
+
+# Install dependencies
+make deps
+
+# Build the project
 make build
-# ou
-go build -o blockchain
 ```
 
-## Passo 2: Criar Carteiras
+This creates the `./build/blockchain` executable.
 
-Primeiro, vamos criar duas carteiras (uma para Alice e outra para Bob):
+## Step 2: Create Your First Wallet
 
 ```bash
-./blockchain createwallet
-# Saída: New address is: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
-
-./blockchain createwallet  
-# Saída: New address is: 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+./build/blockchain createwallet
 ```
 
-**Importante**: Anote esses endereços! Vamos chamá-los de:
-- `ALICE_ADDRESS`: primeiro endereço criado
-- `BOB_ADDRESS`: segundo endereço criado
+**Output:**
+```
+New address is: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+```
 
-## Passo 3: Listar Endereços
+💡 **Save this address!** You'll need it for the next steps.
 
-Você pode ver todos os endereços criados:
+### What Happened?
+
+- Generated an ECDSA key pair
+- Created a Bitcoin-like address with Base58 encoding
+- Saved the wallet to `./tmp/wallets.dat`
+
+## Step 3: Create More Wallets
+
+Create at least 2 more wallets:
 
 ```bash
-./blockchain listaddresses
+./build/blockchain createwallet
+./build/blockchain createwallet
 ```
 
-## Passo 4: Criar o Blockchain
-
-Crie o blockchain enviando a recompensa do bloco gênesis para Alice:
+### List All Addresses
 
 ```bash
-./blockchain createblockchain -address ALICE_ADDRESS
+./build/blockchain listaddresses
 ```
 
-Você verá:
+**Output:**
 ```
-No existing blockchain found
+1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+1JfbZRwdDHKZmuiZgYArJZhcuuzuw2HuMu
+```
+
+## Step 4: Create the Blockchain
+
+Use the first address to receive the genesis block reward:
+
+```bash
+./build/blockchain createblockchain -address 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+```
+
+**Output:**
+```
+Mining genesis block...
+[Lots of hash attempts...]
 Genesis created
-Done! There are 1 transactions in the UTXO set.
 Finished!
 ```
 
-## Passo 5: Verificar Saldo
+### What Happened?
 
-Alice deve ter 50 moedas (recompensa do bloco gênesis):
+- Created genesis block with Proof of Work
+- Coinbase transaction gave 50 coins to your address
+- Saved blockchain to `./tmp/blocks/`
+- Built UTXO set
 
-```bash
-./blockchain getbalance -address ALICE_ADDRESS
-# Saída: Balance of ALICE_ADDRESS: 50
-```
-
-Bob ainda não tem saldo:
+## Step 5: Check Your Balance
 
 ```bash
-./blockchain getbalance -address BOB_ADDRESS
-# Saída: Balance of BOB_ADDRESS: 0
+./build/blockchain getbalance -address 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 ```
 
-## Passo 6: Enviar Transação
+**Output:**
+```
+Balance of 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa: 50
+```
 
-Alice envia 10 moedas para Bob:
+🎉 You have 50 coins from the genesis block!
+
+## Step 6: Send Your First Transaction
+
+Send coins to another address:
 
 ```bash
-./blockchain send -from ALICE_ADDRESS -to BOB_ADDRESS -amount 10
+./build/blockchain send \
+  -from 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa \
+  -to 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2 \
+  -amount 10
 ```
 
-Durante a mineração, você verá o Proof of Work em ação:
+**Output:**
 ```
-Hash: 0000abc123..., Nonce: 12345
+Mining new block...
+[Proof of Work...]
 Success!
 ```
 
-## Passo 7: Verificar Novos Saldos
+### What Happened?
 
-Verifique o saldo de Alice (deve ter 40 + 50 da recompensa de mineração):
+1. Created transaction spending 10 coins
+2. Found UTXOs to cover the amount
+3. Created change output for remaining coins
+4. Signed transaction with ECDSA
+5. Mined new block with transaction + coinbase
+6. Updated UTXO set
+
+## Step 7: Verify Balances
+
+Check sender balance:
+```bash
+./build/blockchain getbalance -address 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+```
+
+**Output:** `90` (50 initial - 10 sent + 50 mining reward)
+
+Check receiver balance:
+```bash
+./build/blockchain getbalance -address 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+```
+
+**Output:** `10` (received from transaction)
+
+## Step 8: View the Blockchain
 
 ```bash
-./blockchain getbalance -address ALICE_ADDRESS
-# Saída: Balance of ALICE_ADDRESS: 90
+./build/blockchain printchain
 ```
 
-Explicação:
-- Alice tinha 50
-- Enviou 10 para Bob
-- Recebeu 50 de recompensa por minerar o bloco
-- Total: 50 - 10 + 50 = 90
-
-Verifique o saldo de Bob:
-
-```bash
-./blockchain getbalance -address BOB_ADDRESS
-# Saída: Balance of BOB_ADDRESS: 10
+**Output:**
 ```
-
-## Passo 8: Visualizar a Blockchain
-
-```bash
-./blockchain printchain
-```
-
-Você verá algo como:
-
-```
-============ Block 0000abc123def456... ============
+============ Block 000abc... ============
 Height: 1
-Prev. hash: 0000xyz789...
+Prev. hash: 000def...
 PoW: true
---- Transaction abc123...:
-     Input 0:
-       TXID:     def456...
-       Out:       0
-       Signature: 789abc...
-       PubKey:    123def...
-     Output 0:
-       Value:  10
-       Script: 456789...
-     Output 1:
-       Value:  40
-       Script: abc123...
+--- Transaction 123abc... ---
+   Input 0:
+      TXID: 456def
+      Out: 0
+      Signature: 789ghi...
+   Output 0:
+      Value: 10
+      To: 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+   Output 1:
+      Value: 40
+      To: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa (change)
 
-
-============ Block 0000def456abc789... ============
+============ Block 000def... ============
 Height: 0
-Prev. hash: 
+Prev. hash:
 PoW: true
---- Transaction (Genesis):
-     Input 0:
-       TXID:     
-       Out:       -1
-     Output 0:
-       Value:  50
-       Script: xyz123...
+--- Transaction 456def... ---
+   Output 0:
+      Value: 50
+      To: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 ```
 
-## Entendendo os Conceitos
+## Step 9: Multiple Transactions
 
-### 1. **Recompensa de Mineração**
-Cada vez que você envia uma transação, um bloco é minerado e você recebe 50 moedas como recompensa.
-
-### 2. **Troco**
-Se Alice envia 10 moedas mas tem um UTXO de 50, o sistema cria:
-- Output de 10 para Bob
-- Output de 40 de troco para Alice
-
-### 3. **Proof of Work**
-O minerador precisa encontrar um nonce que faça o hash do bloco começar com zeros. Quanto maior a dificuldade, mais zeros são necessários.
-
-### 4. **UTXOs**
-Cada transação consome outputs de transações anteriores (inputs) e cria novos outputs. Um output só pode ser gasto uma vez.
-
-## Cenário Completo de Teste
-
-Aqui está um script completo para testar:
+Send more transactions:
 
 ```bash
-# 1. Compilar
-make build
+# Send from first to third address
+./build/blockchain send \
+  -from 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa \
+  -to 1JfbZRwdDHKZmuiZgYArJZhcuuzuw2HuMu \
+  -amount 25
 
-# 2. Criar carteiras
-echo "Criando carteira para Alice..."
-ALICE=$(./blockchain createwallet | grep "New address is:" | cut -d' ' -f4)
-echo "Alice: $ALICE"
-
-echo "Criando carteira para Bob..."
-BOB=$(./blockchain createwallet | grep "New address is:" | cut -d' ' -f4)
-echo "Bob: $BOB"
-
-echo "Criando carteira para Charlie..."
-CHARLIE=$(./blockchain createwallet | grep "New address is:" | cut -d' ' -f4)
-echo "Charlie: $CHARLIE"
-
-# 3. Criar blockchain
-echo "Criando blockchain..."
-./blockchain createblockchain -address $ALICE
-
-# 4. Verificar saldos iniciais
-echo "Saldos iniciais:"
-./blockchain getbalance -address $ALICE
-./blockchain getbalance -address $BOB
-./blockchain getbalance -address $CHARLIE
-
-# 5. Alice envia 10 para Bob
-echo "Alice envia 10 para Bob..."
-./blockchain send -from $ALICE -to $BOB -amount 10
-
-# 6. Alice envia 20 para Charlie
-echo "Alice envia 20 para Charlie..."
-./blockchain send -from $ALICE -to $CHARLIE -amount 20
-
-# 7. Bob envia 5 para Charlie
-echo "Bob envia 5 para Charlie..."
-./blockchain send -from $BOB -to $CHARLIE -amount 5
-
-# 8. Verificar saldos finais
-echo "Saldos finais:"
-./blockchain getbalance -address $ALICE
-./blockchain getbalance -address $BOB
-./blockchain getbalance -address $CHARLIE
-
-# 9. Imprimir blockchain
-echo "Blockchain completa:"
-./blockchain printchain
+# Send from second to third
+./build/blockchain send \
+  -from 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2 \
+  -to 1JfbZRwdDHKZmuiZgYArJZhcuuzuw2HuMu \
+  -amount 5
 ```
 
-## Comandos Úteis
-
-### Limpar tudo e começar de novo:
+Check all balances:
 ```bash
-make clean
-make build
+./build/blockchain getbalance -address 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+./build/blockchain getbalance -address 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+./build/blockchain getbalance -address 1JfbZRwdDHKZmuiZgYArJZhcuuzuw2HuMu
 ```
 
-### Verificar quantas transações no UTXO set:
+## Step 10: Reindex UTXO Set
+
+If needed, rebuild the UTXO set from the blockchain:
+
 ```bash
-./blockchain reindexutxo
+./build/blockchain reindexutxo
 ```
 
-### Usar o Makefile:
+**Output:**
+```
+Done! There are 6 transactions in the UTXO set.
+```
+
+## 🌐 Network Tutorial
+
+### Start Multiple Nodes
+
+**Terminal 1 - Seed + Miner:**
 ```bash
-# Criar carteira
-make wallet
-
-# Criar blockchain
-make blockchain ADDRESS=$ALICE
-
-# Enviar transação
-make send FROM=$ALICE TO=$BOB AMOUNT=10
-
-# Ver saldo
-make balance ADDRESS=$ALICE
+./build/blockchain startnode -port 3000 -miner 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 ```
 
-## Problemas Comuns
-
-### 1. "No existing blockchain found"
-Você precisa criar o blockchain primeiro:
+**Terminal 2 - Miner:**
 ```bash
-./blockchain createblockchain -address SEU_ENDERECO
+./build/blockchain startnode -port 3001 -miner 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
 ```
 
-### 2. "Not enough funds"
-Você não tem moedas suficientes. Verifique seu saldo primeiro.
-
-### 3. "Address is not Valid"
-Verifique se você está usando um endereço válido criado pelo `createwallet`.
-
-### 4. Banco de dados travado
-Se o programa foi interrompido abruptamente:
+**Terminal 3 - Send Transaction:**
 ```bash
-rm -rf ./tmp
-# Depois crie o blockchain novamente
+./build/blockchain send \
+  -from 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa \
+  -to 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2 \
+  -amount 10
 ```
 
-## Explorando o Código
+Watch the transaction propagate and get mined!
 
-### Ver como funciona o Proof of Work:
-```go
-// blockchain/proof.go
-func (pow *ProofOfWork) Run() (int, []byte) {
-    // Loop até encontrar hash válido
-    for nonce < math.MaxInt64 {
-        data := pow.InitData(nonce)
-        hash = sha256.Sum256(data)
-        // Verifica se hash é menor que target
-        if intHash.Cmp(pow.Target) == -1 {
-            break
-        }
-        nonce++
-    }
+## 📊 Understanding the Output
+
+### Transaction Structure
+
+```
+Transaction abc123...
+  Inputs: [Reference to previous outputs]
+  Outputs: [New outputs with values]
+  Signature: [ECDSA signature]
+```
+
+### Block Structure
+
+```
+Block hash: 000abc...
+  Timestamp: 1234567890
+  Height: 5
+  Previous Hash: 000def...
+  Nonce: 123456
+  Transactions: [...]
+```
+
+### UTXO Set
+
+Collection of all unspent outputs:
+```
+{
+  "tx_id:output_index": {value, address},
+  ...
 }
 ```
 
-### Ver como transações são criadas:
-```go
-// blockchain/transaction.go
-func NewTransaction(from, to string, amount int, chain *Blockchain) *Transaction {
-    // Encontra UTXOs gastáveis
-    acc, validOutputs := chain.FindSpendableOutputs(pubKeyHash, amount)
-    // Cria inputs dos UTXOs
-    // Cria outputs (um para destino, outro para troco)
-    // Assina a transação
-}
+## 🎯 Exercises
+
+1. **Create 5 wallets** and distribute coins among them
+2. **Send circular transactions** (A→B, B→C, C→A)
+3. **Monitor mining** by printing the chain after each transaction
+4. **Test edge cases**:
+   - Try sending more than you have
+   - Send to an invalid address
+   - Use a non-existent wallet
+
+## 🐛 Troubleshooting
+
+### "No existing blockchain found"
+
+**Solution:** Create a blockchain first:
+```bash
+./build/blockchain createblockchain -address YOUR_ADDRESS
 ```
 
-### Ver como Merkle Tree funciona:
-```go
-// blockchain/merkle.go
-func NewMerkleTree(data [][]byte) *MerkleTree {
-    // Cria folhas da árvore
-    // Constrói árvore de baixo para cima
-    // Retorna raiz
-}
+### "Address is not valid"
+
+**Solution:** Check your address with:
+```bash
+./build/blockchain listaddresses
 ```
 
-## Próximos Experimentos
+### "Not enough funds"
 
-1. **Modificar a dificuldade**: Edite `Difficulty` em `blockchain/proof.go` (valores menores = mais fácil)
+**Solution:** Check your balance:
+```bash
+./build/blockchain getbalance -address YOUR_ADDRESS
+```
 
-2. **Modificar recompensa**: Edite `subsidy` em `blockchain/transaction.go`
+You need enough to cover the amount + it will be used for mining.
 
-3. **Adicionar mais funcionalidades**:
-   - Sistema de taxas de transação
-   - Limitar tamanho do bloco
-   - Adicionar timestamp nas transações
-   - Criar sistema de "notas" nas transações
+## 📚 Next Steps
 
-4. **Estudar o código**: Leia os arquivos na ordem:
-   - `block.go` → estrutura básica
-   - `proof.go` → mineração
-   - `transaction.go` → transações
-   - `wallet.go` → carteiras
-   - `blockchain.go` → blockchain completo
-   - `utxo.go` → otimizações
-   - `merkle.go` → estrutura de dados
+- Read [Bitcoin Comparison](BITCOIN_COMPARISON.md) to understand similarities
+- Try the [Network Quick Start](../QUICKSTART_NETWORK.md) guide
+- Explore [Improvements](IMPROVEMENTS.md) for future enhancements
+- Study the [Architecture](../ARCHITECTURE.md) document
+
+## 💡 Key Concepts
+
+### Proof of Work
+- Mining finds a hash with leading zeros
+- Difficulty determines number of zeros
+- Nonce is incremented until valid hash found
+
+### UTXO Model
+- Outputs can only be spent once
+- Transactions reference previous outputs
+- Change is returned to sender
+
+### Digital Signatures
+- Private key signs transactions
+- Public key verifies signatures
+- Prevents transaction tampering
+
+### Merkle Tree
+- Efficient transaction hashing
+- Root included in block header
+- Allows SPV verification
 
 ---
 
-Divirta-se explorando o blockchain! 🚀
+**Congratulations! You've completed the tutorial!** 🎉
+
+Now you understand the basics of blockchain. Try experimenting with the network features next!
 

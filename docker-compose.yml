@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # Seed node (non-mining)
+  node-seed:
+    build: .
+    container_name: blockchain-seed
+    hostname: node-seed
+    ports:
+      - "3000:3000"
+    volumes:
+      - seed-data:/app/data
+    networks:
+      blockchain-net:
+        ipv4_address: 172.20.0.2
+    command: startnode -port 3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Mining node 1
+  node-miner1:
+    build: .
+    container_name: blockchain-miner1
+    hostname: node-miner1
+    ports:
+      - "3001:3001"
+    volumes:
+      - miner1-data:/app/data
+    networks:
+      blockchain-net:
+        ipv4_address: 172.20.0.3
+    depends_on:
+      - node-seed
+    environment:
+      - SEED_NODE=172.20.0.2:3000
+    command: >
+      sh -c "sleep 5 && 
+             /app/blockchain createwallet > /tmp/wallet.txt 2>&1 && 
+             MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4) &&
+             /app/blockchain startnode -port 3001 -miner $$MINER_ADDRESS"
+    restart: unless-stopped
+
+  # Mining node 2
+  node-miner2:
+    build: .
+    container_name: blockchain-miner2
+    hostname: node-miner2
+    ports:
+      - "3002:3002"
+    volumes:
+      - miner2-data:/app/data
+    networks:
+      blockchain-net:
+        ipv4_address: 172.20.0.4
+    depends_on:
+      - node-seed
+    environment:
+      - SEED_NODE=172.20.0.2:3000
+    command: >
+      sh -c "sleep 5 && 
+             /app/blockchain createwallet > /tmp/wallet.txt 2>&1 && 
+             MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4) &&
+             /app/blockchain startnode -port 3002 -miner $$MINER_ADDRESS"
+    restart: unless-stopped
+
+  # Regular node (non-mining)
+  node-regular:
+    build: .
+    container_name: blockchain-regular
+    hostname: node-regular
+    ports:
+      - "3003:3003"
+    volumes:
+      - regular-data:/app/data
+    networks:
+      blockchain-net:
+        ipv4_address: 172.20.0.5
+    depends_on:
+      - node-seed
+    environment:
+      - SEED_NODE=172.20.0.2:3000
+    command: >
+      sh -c "sleep 5 && /app/blockchain startnode -port 3003"
+    restart: unless-stopped
+
+networks:
+  blockchain-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  seed-data:
+  miner1-data:
+  miner2-data:
+  regular-data:
+

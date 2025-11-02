@@ -1,20 +1,18 @@
-# Binários
-blockchain
+# Build artifacts
+/blockchain
+build/blockchain
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Arquivos de teste
+# Test files
 *.test
 *.out
 
-# Diretório de dados
+# Data directory
 tmp/
-
-# Dependências do Go
-go.sum
 
 # IDEs
 .idea/
@@ -23,7 +21,7 @@ go.sum
 *.swo
 *~
 
-# Sistema operacional
+# OS files
 .DS_Store
 Thumbs.db
 

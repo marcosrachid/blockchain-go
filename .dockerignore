@@ -1,5 +1,6 @@
+INVALIDATE_CACHE=1762119182
 # Build artifacts
-build/
+# build/ - Commented out because we need to copy the pre-built binary
 *.exe
 *.dll
 *.so

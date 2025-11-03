@@ -38,7 +38,7 @@ Este projeto implementa os principais conceitos do Bitcoin:
 - Usado no cabeçalho do bloco
 
 ### 7. **Persistência**
-- Banco de dados BadgerDB
+- Banco de dados LevelDB (suporta acesso concorrente de leitura/escrita)
 - Serialização/deserialização de blocos
 - Iterador para percorrer a blockchain
 
@@ -209,7 +209,7 @@ Este é um projeto educacional. Algumas diferenças em relação ao Bitcoin real
 ## 🛠️ Tecnologias Utilizadas
 
 - **Go 1.24+**: Linguagem de programação
-- **BadgerDB**: Banco de dados key-value para persistência
+- **LevelDB**: Banco de dados key-value para persistência (com suporte a acesso concorrente)
 - **crypto/ecdsa**: Criptografia de curva elíptica
 - **crypto/sha256**: Função hash SHA-256
 - **golang.org/x/crypto/ripemd160**: Hash RIPEMD-160

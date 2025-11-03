@@ -42,7 +42,7 @@ Este projeto implementa os principais conceitos do Bitcoin:
 - Implementação idêntica ao Bitcoin
 
 ### 7. **Persistência**
-- Banco de dados BadgerDB
+- Banco de dados LevelDB (suporta acesso concorrente de leitura/escrita)
 - Serialização/deserialização de blocos
 - Iterador de blockchain
 

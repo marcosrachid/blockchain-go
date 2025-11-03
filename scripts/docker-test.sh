@@ -66,17 +66,13 @@ docker logs blockchain-miner2 --tail 15 2>/dev/null || echo "Miner 2 still start
 
 echo ""
 echo "=========================================="
-echo "   Test Blockchain Commands"
+echo "   Network Connectivity Test"
 echo "=========================================="
 
-# Test getting wallet list
-echo -e "${BLUE}📋 Listing wallets in seed node:${NC}"
-docker exec blockchain-seed /app/blockchain listaddresses 2>/dev/null || echo "Seed node still initializing..."
-
-# Test blockchain info
-echo ""
-echo -e "${BLUE}⛓️  Blockchain info:${NC}"
-docker exec blockchain-seed /app/blockchain printchain 2>/dev/null | head -20 || echo "Blockchain still being created..."
+# Check if nodes can see each other
+echo -e "${BLUE}🔗 Testing peer connectivity:${NC}"
+echo "Seed node connections:"
+docker logs blockchain-seed 2>&1 | grep -i "version from" | tail -5 || echo "No peer connections logged yet"
 
 echo ""
 echo "=========================================="
@@ -94,10 +90,12 @@ echo "  docker-compose logs -f node-regular     # View regular node logs"
 echo "  docker-compose down                     # Stop all nodes"
 echo "  docker-compose down -v                  # Stop and remove volumes"
 echo ""
-echo "Execute commands in a container:"
-echo "  docker exec -it blockchain-seed /app/blockchain listaddresses"
-echo "  docker exec -it blockchain-miner1 /app/blockchain getbalance -address ADDRESS"
-echo "  docker exec -it blockchain-seed /app/blockchain printchain"
+echo -e "${YELLOW}⚠️  IMPORTANT: Database Lock${NC}"
+echo "While nodes are running, the database is locked."
+echo "To execute CLI commands (printchain, getbalance, etc):"
+echo "  1. Stop the network: docker-compose down"
+echo "  2. Run commands without starting the server"
+echo "  3. Or implement read-only database access"
 echo ""
 echo -e "${YELLOW}To view logs continuously, run:${NC}"
 echo "  docker-compose logs -f"

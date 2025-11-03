@@ -13,7 +13,8 @@ func Handle(err error) {
 
 // DBexists checks if the database exists
 func DBexists() bool {
-	if _, err := os.Stat(dbPath + "/MANIFEST"); os.IsNotExist(err) {
+	// LevelDB creates a CURRENT file in the database directory
+	if _, err := os.Stat(dbPath + "/CURRENT"); os.IsNotExist(err) {
 		return false
 	}
 

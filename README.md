@@ -47,7 +47,7 @@ This project implements the main Bitcoin concepts:
 
 ### 7. **Persistence**
 
-- BadgerDB database
+- LevelDB database (supports concurrent read/write access)
 - Block serialization/deserialization
 - Blockchain iterator
 

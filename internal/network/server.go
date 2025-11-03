@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
@@ -9,7 +10,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/marcocsrachid/blockchain-go/internal/api"
 	"github.com/marcocsrachid/blockchain-go/internal/blockchain"
 )
 
@@ -17,6 +22,8 @@ const (
 	protocol      = "tcp"
 	version       = 1
 	commandLength = 12
+	// Target block time for difficulty adjustment (not used as a timer!)
+	targetBlockTime = 60 * time.Second // 1 minute target (Bitcoin = 10 min)
 )
 
 var (
@@ -25,6 +32,7 @@ var (
 	knownNodes      = initKnownNodes()
 	blocksInTransit = [][]byte{}
 	memoryPool      = make(map[string]*blockchain.Transaction)
+	mempoolMux      sync.RWMutex
 )
 
 // initKnownNodes initializes known nodes from environment or default
@@ -37,26 +45,77 @@ func initKnownNodes() []string {
 
 // Server represents the network server
 type Server struct {
-	Address    string
-	Blockchain *blockchain.Blockchain
-	Peers      *PeerList
-	IsMining   bool
+	Address         string
+	Blockchain      *blockchain.Blockchain
+	Peers           *PeerList
+	IsMining        bool
+	stopMining      chan bool
+	miningInterrupt chan bool
+	APIServer       *api.Server
+	Wallets         *blockchain.Wallets
 }
 
 // NewServer creates a new network server
-func NewServer(address string, bc *blockchain.Blockchain) *Server {
-	return &Server{
-		Address:    address,
-		Blockchain: bc,
-		Peers:      NewPeerList(),
-		IsMining:   false,
+func NewServer(address string, bc *blockchain.Blockchain, wallets *blockchain.Wallets) *Server {
+	// Extract port from address for API
+	parts := strings.Split(address, ":")
+	apiPort := "8080" // Default API port
+	if len(parts) == 2 {
+		// Use P2P port + 1000 for API
+		// 3000 -> 4000, 3001 -> 4001, etc.
+		port := parts[1]
+		switch port {
+		case "3000":
+			apiPort = "4000"
+		case "3001":
+			apiPort = "4001"
+		case "3002":
+			apiPort = "4002"
+		case "3003":
+			apiPort = "4003"
+		default:
+			apiPort = "4000"
+		}
 	}
+
+	apiServer := api.NewServer(bc, wallets, apiPort)
+
+	server := &Server{
+		Address:         address,
+		Blockchain:      bc,
+		Peers:           NewPeerList(),
+		IsMining:        false,
+		stopMining:      make(chan bool),
+		miningInterrupt: make(chan bool, 10), // Buffered to not block
+		APIServer:       apiServer,
+		Wallets:         wallets,
+	}
+
+	// Set network server reference in API for broadcasting transactions
+	apiServer.SetNetworkServer(server)
+
+	return server
 }
 
 // Start starts the network server
 func (s *Server) Start() error {
-	nodeAddress = s.Address
-	
+	// Use environment variable NODE_ADDR for P2P identification (Docker)
+	// Fall back to s.Address for standalone mode
+	if envAddr := os.Getenv("NODE_ADDR"); envAddr != "" {
+		nodeAddress = envAddr
+		log.Printf("Using P2P address from env: %s", nodeAddress)
+	} else {
+		nodeAddress = s.Address
+	}
+
+	// Start API server in background
+	go func() {
+		log.Printf("Starting API server...")
+		if err := s.APIServer.Start(); err != nil {
+			log.Printf("API server error: %v", err)
+		}
+	}()
+
 	ln, err := net.Listen(protocol, s.Address)
 	if err != nil {
 		return fmt.Errorf("failed to start server: %v", err)
@@ -64,10 +123,13 @@ func (s *Server) Start() error {
 	defer ln.Close()
 
 	log.Printf("Node server started on %s", s.Address)
+	log.Printf("Node identifies as: %s", nodeAddress)
 
 	// Connect to seed nodes if not seed
-	if s.Address != knownNodes[0] {
-		s.sendVersion(knownNodes[0])
+	seedNode := knownNodes[0]
+	if nodeAddress != seedNode {
+		log.Printf("Connecting to seed node: %s", seedNode)
+		s.sendVersion(seedNode)
 	}
 
 	for {
@@ -86,6 +148,35 @@ func (s *Server) StartMining(address string) {
 	s.IsMining = true
 	miningAddress = address
 	log.Printf("Mining enabled. Rewards will go to %s", address)
+
+	// Start continuous mining loop
+	go s.miningLoop()
+}
+
+// miningLoop continuously mines new blocks
+// Real PoW mining - no timers, works continuously until finding valid block
+func (s *Server) miningLoop() {
+	log.Println("🔨 Starting continuous mining (real PoW)...")
+
+	for {
+		select {
+		case <-s.stopMining:
+			log.Println("Mining stopped")
+			return
+		default:
+			// Check if we have transactions to mine (or just mine empty block with coinbase)
+			mempoolMux.RLock()
+			hasTxs := len(memoryPool) > 0
+			mempoolMux.RUnlock()
+
+			if hasTxs || true { // Always mine (even empty blocks with coinbase)
+				s.mineTransactions()
+			} else {
+				// Small sleep to avoid CPU spinning when no txs
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}
 }
 
 // handleConnection handles incoming connections
@@ -93,6 +184,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	request, err := io.ReadAll(conn)
 	if err != nil {
 		log.Printf("Error reading request: %v", err)
+		conn.Close()
+		return
+	}
+
+	// Validate request length
+	if len(request) < commandLength {
+		log.Printf("Request too short: %d bytes", len(request))
 		conn.Close()
 		return
 	}
@@ -127,7 +225,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 // sendVersion sends version message to peer
 func (s *Server) sendVersion(addr string) {
 	bestHeight := s.getBestHeight()
-	
+
 	payload := GobEncode(Version{
 		Version:    version,
 		BestHeight: bestHeight,
@@ -157,10 +255,11 @@ func (s *Server) handleVersion(request []byte, conn net.Conn) {
 	// Add peer
 	s.Peers.Add(payload.AddrFrom, conn)
 
-	log.Printf("Received version from %s: height %d (ours: %d)", 
+	log.Printf("Received version from %s: height %d (ours: %d)",
 		payload.AddrFrom, otherHeight, bestHeight)
 
 	if bestHeight < otherHeight {
+		log.Printf("Peer has longer chain, requesting blocks...")
 		s.sendGetBlocks(payload.AddrFrom)
 	} else if bestHeight > otherHeight {
 		s.sendVersion(payload.AddrFrom)
@@ -168,7 +267,11 @@ func (s *Server) handleVersion(request []byte, conn net.Conn) {
 
 	if !s.nodeIsKnown(payload.AddrFrom) {
 		knownNodes = append(knownNodes, payload.AddrFrom)
+		log.Printf("Added new peer: %s (total peers: %d)", payload.AddrFrom, len(knownNodes))
 	}
+
+	// Share our peer list with the new node
+	s.sendAddr(payload.AddrFrom)
 }
 
 // sendGetBlocks sends getblocks request
@@ -302,6 +405,15 @@ func (s *Server) sendBlock(addr string, block *blockchain.Block) {
 	s.sendData(addr, request)
 }
 
+// sendAddr sends known peer addresses to a node
+func (s *Server) sendAddr(addr string) {
+	data := Addr{AddrList: knownNodes}
+	payload := GobEncode(data)
+	request := append(CmdToBytes(CmdAddr), payload...)
+
+	s.sendData(addr, request)
+}
+
 // handleBlock handles block message
 func (s *Server) handleBlock(request []byte, conn net.Conn) {
 	var buff bytes.Buffer
@@ -361,14 +473,14 @@ func (s *Server) handleTx(request []byte, conn net.Conn) {
 
 	txData := payload.Transaction
 	tx := blockchain.DeserializeTransaction(txData)
+
+	mempoolMux.Lock()
 	memoryPool[hex.EncodeToString(tx.ID)] = &tx
+	mempoolMux.Unlock()
 
-	log.Printf("Received transaction %x", tx.ID)
+	log.Printf("📥 Received transaction %x (mempool size: %d)", tx.ID, len(memoryPool))
 
-	// If this node is mining and we have enough transactions, mine a block
-	if s.IsMining && len(memoryPool) >= 2 {
-		s.mineTransactions()
-	}
+	// Mining happens automatically every 60 seconds via miningLoop
 }
 
 // handleAddr handles addr message
@@ -385,9 +497,14 @@ func (s *Server) handleAddr(request []byte, conn net.Conn) {
 	}
 
 	for _, addr := range payload.AddrList {
-		if !s.nodeIsKnown(addr) {
+		if !s.nodeIsKnown(addr) && addr != nodeAddress {
 			knownNodes = append(knownNodes, addr)
-			log.Printf("Added new peer: %s", addr)
+			log.Printf("🌐 Discovered new peer: %s (total: %d)", addr, len(knownNodes))
+
+			// Try to connect to the new peer
+			go func(peerAddr string) {
+				s.sendVersion(peerAddr)
+			}(addr)
 		}
 	}
 }
@@ -410,8 +527,10 @@ func (s *Server) BroadcastTx(tx *blockchain.Transaction) {
 
 // BroadcastBlock broadcasts block to all known peers
 func (s *Server) BroadcastBlock(block *blockchain.Block) {
+	log.Printf("📡 Broadcasting block %d to %d peers", block.Height, len(knownNodes)-1)
 	for _, node := range knownNodes {
 		if node != nodeAddress {
+			log.Printf("   → Sending to %s", node)
 			s.sendInv(node, InvTypeBlock, [][]byte{block.Hash})
 		}
 	}
@@ -477,9 +596,73 @@ func (s *Server) getBlock(hash []byte) (*blockchain.Block, error) {
 }
 
 func (s *Server) addBlock(block *blockchain.Block) {
-	// In a real implementation, we should validate the block before adding
-	// For now, we'll just log it
-	log.Printf("Block %x added to chain", block.Hash)
+	// Get current best height
+	currentHeight := s.Blockchain.GetBestHeight()
+
+	// Check if block is next in sequence
+	if block.Height == currentHeight+1 {
+		// Validate block using the difficulty stored in the block
+		pow := blockchain.NewProofWithDifficulty(block, block.Difficulty)
+
+		// Debug: print all InitData components
+		pow.DebugInitData(block.Nonce)
+
+		// Recalculate hash
+		data := pow.InitData(block.Nonce)
+		log.Printf("🔍 Raw InitData (len=%d): %x", len(data), data)
+		hash := sha256.Sum256(data)
+
+		if !pow.Validate() {
+			txHash := block.HashTransactions()
+			log.Printf("❌ Invalid block received (PoW failed)")
+			log.Printf("   Block Height: %d, Hash: %x", block.Height, block.Hash)
+			log.Printf("   Recalculated Hash: %x", hash)
+			log.Printf("   Hashes match: %v", bytes.Equal(block.Hash, hash[:]))
+			log.Printf("   TxHash: %x", txHash)
+			log.Printf("   PrevHash: %x", block.PrevHash)
+			log.Printf("   Nonce: %d, Difficulty: %d, Timestamp: %d", block.Nonce, block.Difficulty, block.Timestamp)
+			log.Printf("   pow.Difficulty: %d, pow.Block.Difficulty: %d", pow.Difficulty, pow.Block.Difficulty)
+			log.Printf("   Num Transactions: %d", len(block.Transactions))
+			log.Printf("   ❌ Block rejected!")
+			return
+		}
+		log.Printf("✅ Block PoW validated successfully (difficulty: %d)", block.Difficulty)
+
+		// Add block to blockchain
+		err := s.Blockchain.Database.Put(block.Hash, block.Serialize(), nil)
+		if err != nil {
+			log.Printf("Error storing block: %v", err)
+			return
+		}
+
+		err = s.Blockchain.Database.Put([]byte("lh"), block.Hash, nil)
+		if err != nil {
+			log.Printf("Error updating last hash: %v", err)
+			return
+		}
+
+		s.Blockchain.LastHash = block.Hash
+		log.Printf("✅ Block accepted! Height: %d, Hash: %x", block.Height, block.Hash)
+
+		// Update UTXO set
+		UTXOSet := blockchain.UTXOSet{Blockchain: s.Blockchain}
+		UTXOSet.Reindex()
+
+		// Interrupt any ongoing mining (non-blocking)
+		select {
+		case s.miningInterrupt <- true:
+			log.Println("🛑 Signaled mining interrupt - new block accepted")
+		default:
+			// Channel full or no miner active, ignore
+		}
+
+	} else if block.Height > currentHeight+1 {
+		// We're missing blocks, request them
+		log.Printf("⚠️  Missing blocks! Our height: %d, received: %d", currentHeight, block.Height)
+		// This should trigger a full sync, but for now just log
+	} else {
+		log.Printf("ℹ️  Block %d already known or outdated", block.Height)
+	}
 }
 
 func (s *Server) nodeIsKnown(addr string) bool {
@@ -502,8 +685,11 @@ func (s *Server) removeNode(addr string) {
 }
 
 func (s *Server) mineTransactions() {
+	mempoolMux.Lock()
+
 	var txs []*blockchain.Transaction
 
+	// Collect valid transactions from mempool
 	for id := range memoryPool {
 		tx := memoryPool[id]
 		if s.Blockchain.VerifyTransaction(tx) {
@@ -511,27 +697,45 @@ func (s *Server) mineTransactions() {
 		}
 	}
 
-	if len(txs) == 0 {
-		log.Println("No valid transactions to mine")
-		return
-	}
-
 	// Get current height for coinbase reward calculation
 	newHeight := s.Blockchain.GetBestHeight() + 1
 	cbTx := blockchain.CoinbaseTX(miningAddress, "", newHeight)
 	txs = append(txs, cbTx)
 
-	newBlock := s.Blockchain.MineBlock(txs)
-	
+	// Always mine, even if only coinbase transaction exists
+	if len(txs) == 1 {
+		log.Println("⛏️  Mining block with only coinbase transaction (reward)")
+	} else {
+		log.Printf("⛏️  Mining block with %d transaction(s) + coinbase", len(txs)-1)
+	}
+
+	// Unlock during mining (long operation)
+	mempoolMux.Unlock()
+
+	// Mine with interrupt support
+	newBlock := s.Blockchain.MineBlockWithInterrupt(txs, s.miningInterrupt)
+
+	// If block is nil, mining was interrupted by a new block from network
+	if newBlock == nil {
+		log.Println("⚠️  Mining interrupted - new block received from network")
+		return
+	}
+
+	// Lock again for mempool cleanup
+	mempoolMux.Lock()
+	defer mempoolMux.Unlock()
+
 	UTXOSet := blockchain.UTXOSet{Blockchain: s.Blockchain}
 	UTXOSet.Reindex()
 
-	log.Printf("New block mined: %x", newBlock.Hash)
+	log.Printf("✅ New block mined! Height: %d, Hash: %x", newBlock.Height, newBlock.Hash)
 
 	// Clear mined transactions from mempool
 	for _, tx := range txs {
-		txID := hex.EncodeToString(tx.ID)
-		delete(memoryPool, txID)
+		if !tx.IsCoinbase() { // Don't try to delete coinbase from mempool
+			txID := hex.EncodeToString(tx.ID)
+			delete(memoryPool, txID)
+		}
 	}
 
 	// Broadcast new block
@@ -552,4 +756,3 @@ func AddKnownNode(addr string) {
 	}
 	knownNodes = append(knownNodes, addr)
 }
-

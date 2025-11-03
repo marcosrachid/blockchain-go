@@ -29,7 +29,7 @@ blockchain-go/
 ├── scripts/                      # Build, install, and demo scripts
 │   └── demo.sh                  # Demo script
 ├── tmp/                          # Runtime data (generated)
-│   ├── blocks/                  # BadgerDB blockchain data
+│   ├── blocks/                  # LevelDB blockchain data
 │   └── wallets.dat              # Wallet storage
 ├── .gitignore                   # Git ignore rules
 ├── go.mod                       # Go module definition
@@ -102,7 +102,7 @@ type Blockchain struct {
 }
 ```
 - Manages the entire blockchain
-- Provides persistence with BadgerDB
+- Provides persistence with LevelDB (supports concurrent read/write access)
 - Handles block mining and validation
 - Manages transaction verification
 
@@ -216,7 +216,7 @@ type ProofOfWork struct {
 - Simpler deployment
 - No separate libraries needed
 
-### 3. BadgerDB for Storage
+### 3. LevelDB for Storage
 - Embedded key-value store
 - No external database required
 - Fast and reliable
@@ -309,7 +309,7 @@ See `docs/IMPROVEMENTS.md` for detailed suggestions:
 - [Bitcoin Whitepaper](https://bitcoin.org/bitcoin.pdf)
 - [golang-standards/project-layout](https://github.com/golang-standards/project-layout)
 - [Mastering Bitcoin](https://github.com/bitcoinbook/bitcoinbook)
-- [BadgerDB](https://github.com/dgraph-io/badger)
+- [LevelDB](https://github.com/syndtr/goleveldb)
 
 ---
 

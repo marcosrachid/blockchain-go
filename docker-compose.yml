@@ -7,26 +7,36 @@ services:
     container_name: blockchain-seed
     hostname: node-seed
     ports:
-      - "3000:3000"
+      - "3000:3000"  # P2P
+      - "4000:4000"  # API
     volumes:
       - seed-data:/app/data
     networks:
       blockchain-net:
         ipv4_address: 172.20.0.2
+    environment:
+      - BLOCKCHAIN_DATA_DIR=/app/data/blocks
+      - SEED_NODE=node-seed:3000
+      - NODE_ADDR=node-seed:3000
     entrypoint: /bin/sh
     command:
       - -c
       - |
-        if [ ! -d /app/data/blocks ]; then
+        # Ensure tmp directory exists in data volume
+        mkdir -p /app/data/tmp
+
+        if [ ! -f /app/data/blocks/CURRENT ]; then
           echo 'Creating initial blockchain...'
-          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          /app/blockchain createwallet > /tmp/wallet.txt
           SEED_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          echo "Seed address: $$SEED_ADDRESS"
           /app/blockchain createblockchain -address $$SEED_ADDRESS
+          echo 'Blockchain created successfully!'
         fi
         exec /app/blockchain startnode -port 3000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 3000 || exit 1"]
+      test: ["CMD-SHELL", "sleep 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -38,9 +48,11 @@ services:
     container_name: blockchain-miner1
     hostname: node-miner1
     ports:
-      - "3001:3001"
+      - "3001:3001"  # P2P
+      - "4001:4001"  # API
     volumes:
       - miner1-data:/app/data
+      - seed-data:/app/seed-data:ro
     networks:
       blockchain-net:
         ipv4_address: 172.20.0.3
@@ -48,17 +60,38 @@ services:
       node-seed:
         condition: service_healthy
     environment:
-      - SEED_NODE=172.20.0.2:3000
+      - SEED_NODE=node-seed:3000
+      - NODE_ADDR=node-miner1:3001
     entrypoint: /bin/sh
     command:
       - -c
       - |
-        /app/blockchain createwallet > /tmp/wallet.txt 2>&1
-        MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
-        if [ ! -d /app/data/blocks ]; then
-          echo 'Creating blockchain for miner1...'
-          /app/blockchain createblockchain -address $$MINER_ADDRESS
+        echo 'Waiting for seed node blockchain...'
+        sleep 5
+
+        # Ensure tmp directory exists in data volume
+        mkdir -p /app/data/tmp
+
+        # Copy blockchain from seed if we don't have one
+        if [ ! -f /app/data/blocks/CURRENT ]; then
+          echo 'Copying blockchain from seed node...'
+          cp -r /app/seed-data/blocks /app/data/
+          echo 'Blockchain copied successfully!'
         fi
+
+        # Create wallet only if it doesn't exist
+        if [ ! -f /app/data/tmp/wallets.dat ]; then
+          echo 'Creating new wallet...'
+          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          echo "Miner address: $$MINER_ADDRESS"
+          echo "$$MINER_ADDRESS" > /app/data/tmp/miner_address.txt
+        else
+          echo 'Wallet already exists, reusing...'
+          MINER_ADDRESS=$$(cat /app/data/tmp/miner_address.txt)
+          echo "Miner address: $$MINER_ADDRESS"
+        fi
+
         exec /app/blockchain startnode -port 3001 -miner $$MINER_ADDRESS
     restart: unless-stopped
 
@@ -68,9 +101,11 @@ services:
     container_name: blockchain-miner2
     hostname: node-miner2
     ports:
-      - "3002:3002"
+      - "3002:3002"  # P2P
+      - "4002:4002"  # API
     volumes:
       - miner2-data:/app/data
+      - seed-data:/app/seed-data:ro
     networks:
       blockchain-net:
         ipv4_address: 172.20.0.4
@@ -78,17 +113,38 @@ services:
       node-seed:
         condition: service_healthy
     environment:
-      - SEED_NODE=172.20.0.2:3000
+      - SEED_NODE=node-seed:3000
+      - NODE_ADDR=node-miner2:3002
     entrypoint: /bin/sh
     command:
       - -c
       - |
-        /app/blockchain createwallet > /tmp/wallet.txt 2>&1
-        MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
-        if [ ! -d /app/data/blocks ]; then
-          echo 'Creating blockchain for miner2...'
-          /app/blockchain createblockchain -address $$MINER_ADDRESS
+        echo 'Waiting for seed node blockchain...'
+        sleep 7
+
+        # Ensure tmp directory exists in data volume
+        mkdir -p /app/data/tmp
+
+        # Copy blockchain from seed if we don't have one
+        if [ ! -f /app/data/blocks/CURRENT ]; then
+          echo 'Copying blockchain from seed node...'
+          cp -r /app/seed-data/blocks /app/data/
+          echo 'Blockchain copied successfully!'
         fi
+
+        # Create wallet only if it doesn't exist
+        if [ ! -f /app/data/tmp/wallets.dat ]; then
+          echo 'Creating new wallet...'
+          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          MINER_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          echo "Miner address: $$MINER_ADDRESS"
+          echo "$$MINER_ADDRESS" > /app/data/tmp/miner_address.txt
+        else
+          echo 'Wallet already exists, reusing...'
+          MINER_ADDRESS=$$(cat /app/data/tmp/miner_address.txt)
+          echo "Miner address: $$MINER_ADDRESS"
+        fi
+
         exec /app/blockchain startnode -port 3002 -miner $$MINER_ADDRESS
     restart: unless-stopped
 
@@ -98,9 +154,11 @@ services:
     container_name: blockchain-regular
     hostname: node-regular
     ports:
-      - "3003:3003"
+      - "3003:3003"  # P2P
+      - "4003:4003"  # API
     volumes:
       - regular-data:/app/data
+      - seed-data:/app/seed-data:ro
     networks:
       blockchain-net:
         ipv4_address: 172.20.0.5
@@ -108,17 +166,34 @@ services:
       node-seed:
         condition: service_healthy
     environment:
-      - SEED_NODE=172.20.0.2:3000
+      - SEED_NODE=node-seed:3000
+      - NODE_ADDR=node-regular:3003
     entrypoint: /bin/sh
     command:
       - -c
       - |
-        if [ ! -d /app/data/blocks ]; then
-          echo 'Creating blockchain for regular node...'
-          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
-          REG_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
-          /app/blockchain createblockchain -address $$REG_ADDRESS
+        echo 'Waiting for seed node blockchain...'
+        sleep 10
+
+        # Copy blockchain from seed if we don't have one
+        if [ ! -f /app/data/blocks/CURRENT ]; then
+          echo 'Copying blockchain from seed node...'
+          cp -r /app/seed-data/blocks /app/data/
+          echo 'Blockchain copied successfully!'
         fi
+
+        # Create wallet if it doesn't exist (for receiving transactions)
+        mkdir -p /app/data/tmp
+        if [ ! -f /app/data/tmp/wallets.dat ]; then
+          echo 'Creating wallet for regular node...'
+          /app/blockchain createwallet > /tmp/wallet.txt 2>&1
+          REGULAR_ADDRESS=$$(cat /tmp/wallet.txt | grep 'New address is:' | cut -d' ' -f4)
+          echo "Regular node address: $$REGULAR_ADDRESS"
+        else
+          echo 'Wallet already exists'
+        fi
+
+        echo 'Starting regular node...'
         exec /app/blockchain startnode -port 3003
     restart: unless-stopped
 

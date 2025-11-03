@@ -19,8 +19,29 @@ import (
 const (
 	checksumLength = 4
 	version        = byte(0x00) // Address version (similar to Bitcoin)
-	walletFile     = "./tmp/wallets.dat"
 )
+
+// getWalletFile returns the wallet file path, checking for Docker environment first
+func getWalletFile() string {
+	// Check if we're in Docker environment by looking for the data directory
+	dockerPath := "/app/data/tmp/wallets.dat"
+	dockerDir := "/app/data/tmp"
+
+	// Create directory if it doesn't exist (Docker environment)
+	if _, err := os.Stat("/app/data"); err == nil {
+		os.MkdirAll(dockerDir, 0755)
+		log.Printf("🔑 Using Docker wallet path: %s", dockerPath)
+		return dockerPath
+	}
+
+	// Fallback to local development path
+	// Create local tmp directory if needed
+	if _, err := os.Stat("./tmp"); os.IsNotExist(err) {
+		os.MkdirAll("./tmp", 0755)
+	}
+	log.Printf("🔑 Using local wallet path: ./tmp/wallets.dat")
+	return "./tmp/wallets.dat"
+}
 
 // Wallet stores private and public keys (ECDSA cryptography)
 type Wallet struct {
@@ -49,7 +70,7 @@ func (w *Wallet) MarshalBinary() ([]byte, error) {
 		Y:         w.PrivateKey.Y.Bytes(),
 		PublicKey: w.PublicKey,
 	}
-	
+
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(sw)
@@ -64,14 +85,14 @@ func (w *Wallet) UnmarshalBinary(data []byte) error {
 	if err := dec.Decode(&sw); err != nil {
 		return err
 	}
-	
+
 	curve := elliptic.P256()
 	w.PrivateKey.PublicKey.Curve = curve
 	w.PrivateKey.D = new(big.Int).SetBytes(sw.D)
 	w.PrivateKey.X = new(big.Int).SetBytes(sw.X)
 	w.PrivateKey.Y = new(big.Int).SetBytes(sw.Y)
 	w.PublicKey = sw.PublicKey
-	
+
 	return nil
 }
 
@@ -180,13 +201,14 @@ func (ws *Wallets) GetAllAddresses() []string {
 
 // LoadFile loads wallets from file
 func (ws *Wallets) LoadFile() error {
-	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
+	walletFilePath := getWalletFile()
+	if _, err := os.Stat(walletFilePath); os.IsNotExist(err) {
 		return err
 	}
 
 	var wallets Wallets
 
-	fileContent, err := ioutil.ReadFile(walletFile)
+	fileContent, err := ioutil.ReadFile(walletFilePath)
 	if err != nil {
 		return err
 	}
@@ -206,21 +228,15 @@ func (ws *Wallets) LoadFile() error {
 func (ws *Wallets) SaveFile() {
 	var content bytes.Buffer
 
-	// Create directory if it doesn't exist
-	err := os.MkdirAll("./tmp", os.ModePerm)
-	if err != nil {
-		log.Panic(err)
-	}
-
 	encoder := gob.NewEncoder(&content)
-	err = encoder.Encode(ws)
+	err := encoder.Encode(ws)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	err = ioutil.WriteFile(walletFile, content.Bytes(), 0644)
+	walletFilePath := getWalletFile()
+	err = ioutil.WriteFile(walletFilePath, content.Bytes(), 0644)
 	if err != nil {
 		log.Panic(err)
 	}
 }
-

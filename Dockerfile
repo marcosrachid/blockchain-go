@@ -1,52 +1,40 @@
 # Multi-stage build for smaller image
-FROM golang:1.24-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
+# Stage 1: Build the application locally (outside Docker)
+# We'll copy the pre-built binary instead of building inside Docker
 
-# Set working directory
-WORKDIR /app
-
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the application
-RUN make build
-
-# Final stage
+# Stage 2: Runtime
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS and netcat for healthcheck
+# Install ca-certificates for HTTPS and netcat for health checks
 RUN apk --no-cache add ca-certificates netcat-openbsd
 
-# Create app user
+# Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/build/blockchain /app/blockchain
+# Copy the pre-built binary from build/ directory
+COPY build/blockchain /app/blockchain
 
-# Create data directory
-RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+# Create data directory with correct permissions
+# Note: /app/tmp is NOT created here - wallets should be stored in /app/data/tmp (mounted volume)
+RUN mkdir -p /app/data/blocks && \
+    chown -R appuser:appgroup /app && \
+    chmod +x /app/blockchain
 
 # Switch to non-root user
 USER appuser
 
-# Expose default port
+# Default data directory
+ENV BLOCKCHAIN_DATA_DIR=/app/data/blocks
+
+# Expose network port
 EXPOSE 3000
 
-# Set environment variables
-ENV BLOCKCHAIN_DATA_DIR=/app/data
-ENV NODE_PORT=3000
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
+    CMD sleep 1
 
-# Default command
+# Default command (can be overridden by docker-compose)
 CMD ["/app/blockchain"]
-

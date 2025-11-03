@@ -59,7 +59,7 @@ func InitBlockchain(address string) *Blockchain {
 		cbtx := CoinbaseTX(address, GenesisData, 0) // Genesis block is height 0
 		genesis := Genesis(cbtx)
 		fmt.Println("Genesis created")
-		
+
 		err = db.Put(genesis.Hash, genesis.Serialize(), nil)
 		Handle(err)
 		err = db.Put([]byte("lh"), genesis.Hash, nil)
@@ -130,7 +130,7 @@ func (chain *Blockchain) MineBlockWithInterrupt(transactions []*Transaction, int
 
 	// Create new block with interrupt support
 	newBlock := CreateBlockWithInterrupt(transactions, lastHash, lastHeight+1, interrupt)
-	
+
 	// If block is nil, mining was interrupted
 	if newBlock == nil {
 		return nil
@@ -157,7 +157,7 @@ func (chain *Blockchain) AddBlock(block *Block) {
 
 	// Validate block data
 	blockData := block.Serialize()
-	
+
 	// Save block
 	err = chain.Database.Put(block.Hash, blockData, nil)
 	Handle(err)
@@ -216,15 +216,23 @@ func (chain *Blockchain) GetLastBlock() *Block {
 // GetBlockHashes returns a list of block hashes in the blockchain
 func (chain *Blockchain) GetBlockHashes() [][]byte {
 	var blocks [][]byte
-	iter := chain.Iterator()
+	currentHash := chain.LastHash
 
 	for {
-		block := iter.Next()
+		data, err := chain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block in GetBlockHashes: %v", err)
+			break
+		}
+
+		block := Deserialize(data)
 		blocks = append(blocks, block.Hash)
 
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return blocks
@@ -232,10 +240,16 @@ func (chain *Blockchain) GetBlockHashes() [][]byte {
 
 // FindTransaction finds a transaction by its ID
 func (chain *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
-	iter := chain.Iterator()
+	currentHash := chain.LastHash
 
 	for {
-		block := iter.Next()
+		data, err := chain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block in FindTransaction: %v", err)
+			break
+		}
+
+		block := Deserialize(data)
 
 		for _, tx := range block.Transactions {
 			if bytes.Compare(tx.ID, ID) == 0 {
@@ -246,6 +260,8 @@ func (chain *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return Transaction{}, errors.New("Transaction not found")
@@ -287,10 +303,16 @@ func (chain *Blockchain) VerifyTransaction(tx *Transaction) bool {
 func (chain *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transaction {
 	var unspentTxs []Transaction
 	spentTXOs := make(map[string][]int)
-	iter := chain.Iterator()
+	currentHash := chain.LastHash
 
 	for {
-		block := iter.Next()
+		data, err := chain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block in FindUnspentTransactions: %v", err)
+			break
+		}
+
+		block := Deserialize(data)
 
 		for _, tx := range block.Transactions {
 			txID := hex.EncodeToString(tx.ID)
@@ -322,6 +344,8 @@ func (chain *Blockchain) FindUnspentTransactions(pubKeyHash []byte) []Transactio
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return unspentTxs
@@ -348,10 +372,18 @@ func (chain *Blockchain) FindAllUTXO() map[string]TXOutputs {
 	UTXO := make(map[string]TXOutputs)
 	spentTXOs := make(map[string][]int)
 
-	iter := chain.Iterator()
+	// Use safer iteration method
+	currentHash := chain.LastHash
 
 	for {
-		block := iter.Next()
+		// Try to get block from database
+		data, err := chain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block in FindAllUTXO: %v", err)
+			break
+		}
+
+		block := Deserialize(data)
 
 		for _, tx := range block.Transactions {
 			txID := hex.EncodeToString(tx.ID)
@@ -382,6 +414,8 @@ func (chain *Blockchain) FindAllUTXO() map[string]TXOutputs {
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return UTXO

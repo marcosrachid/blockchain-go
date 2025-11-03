@@ -516,8 +516,19 @@ func (s *Server) handlePing(conn net.Conn) {
 	conn.Write(request)
 }
 
+// AddToMempool adds a transaction to the local mempool
+func (s *Server) AddToMempool(tx *blockchain.Transaction) {
+	mempoolMux.Lock()
+	defer mempoolMux.Unlock()
+
+	txID := hex.EncodeToString(tx.ID)
+	memoryPool[txID] = tx
+	log.Printf("📥 Added transaction %x to local mempool (size: %d)", tx.ID, len(memoryPool))
+}
+
 // BroadcastTx broadcasts transaction to all known peers
 func (s *Server) BroadcastTx(tx *blockchain.Transaction) {
+	log.Printf("📤 Broadcasting transaction %x to %d peers", tx.ID, len(knownNodes)-1)
 	for _, node := range knownNodes {
 		if node != nodeAddress {
 			s.sendTx(node, tx)
@@ -555,33 +566,63 @@ func (s *Server) sendData(addr string, data []byte) {
 // Helper functions
 
 func (s *Server) getBestHeight() int {
-	var lastBlock *blockchain.Block
-	iter := s.Blockchain.Iterator()
-	lastBlock = iter.Next()
+	// Get last block directly from database
+	data, err := s.Blockchain.Database.Get(s.Blockchain.LastHash, nil)
+	if err != nil {
+		log.Printf("⚠️  Error getting last block for height: %v", err)
+		return 0
+	}
+
+	lastBlock := blockchain.Deserialize(data)
 	return lastBlock.Height
 }
 
 func (s *Server) getBlocks() [][]byte {
 	var blocks [][]byte
-	iter := s.Blockchain.Iterator()
+
+	// Use a safer iteration method
+	currentHash := s.Blockchain.LastHash
 
 	for {
-		block := iter.Next()
+		// Try to get the block, but don't panic on error
+		data, err := s.Blockchain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block %x: %v", currentHash, err)
+			break
+		}
+
+		block := blockchain.Deserialize(data)
 		blocks = append(blocks, block.Hash)
 
+		// Stop at genesis block
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return blocks
 }
 
 func (s *Server) getBlock(hash []byte) (*blockchain.Block, error) {
-	iter := s.Blockchain.Iterator()
+	// Use a safer method - try to get directly from database
+	data, err := s.Blockchain.Database.Get(hash, nil)
+	if err == nil {
+		return blockchain.Deserialize(data), nil
+	}
+
+	// If not found, try iterating (fallback)
+	currentHash := s.Blockchain.LastHash
 
 	for {
-		block := iter.Next()
+		data, err := s.Blockchain.Database.Get(currentHash, nil)
+		if err != nil {
+			log.Printf("⚠️  Error getting block in iteration: %v", err)
+			break
+		}
+
+		block := blockchain.Deserialize(data)
 
 		if bytes.Equal(block.Hash, hash) {
 			return block, nil
@@ -590,6 +631,8 @@ func (s *Server) getBlock(hash []byte) (*blockchain.Block, error) {
 		if len(block.PrevHash) == 0 {
 			break
 		}
+
+		currentHash = block.PrevHash
 	}
 
 	return nil, fmt.Errorf("block not found")
@@ -648,6 +691,24 @@ func (s *Server) addBlock(block *blockchain.Block) {
 		UTXOSet := blockchain.UTXOSet{Blockchain: s.Blockchain}
 		UTXOSet.Reindex()
 
+		// Remove mined transactions from mempool
+		mempoolMux.Lock()
+		removedCount := 0
+		for _, tx := range block.Transactions {
+			if !tx.IsCoinbase() {
+				txID := hex.EncodeToString(tx.ID)
+				if _, exists := memoryPool[txID]; exists {
+					delete(memoryPool, txID)
+					removedCount++
+				}
+			}
+		}
+		mempoolMux.Unlock()
+
+		if removedCount > 0 {
+			log.Printf("🧹 Cleaned %d transactions from mempool (size now: %d)", removedCount, len(memoryPool))
+		}
+
 		// Interrupt any ongoing mining (non-blocking)
 		select {
 		case s.miningInterrupt <- true:
@@ -689,13 +750,21 @@ func (s *Server) mineTransactions() {
 
 	var txs []*blockchain.Transaction
 
+	log.Printf("🔵 MINING: Checking mempool (size: %d)", len(memoryPool))
+
 	// Collect valid transactions from mempool
 	for id := range memoryPool {
 		tx := memoryPool[id]
+		log.Printf("🔵 MINING: Verifying transaction %s", id)
 		if s.Blockchain.VerifyTransaction(tx) {
+			log.Printf("✅ MINING: Transaction %s is valid, adding to block", id)
 			txs = append(txs, tx)
+		} else {
+			log.Printf("❌ MINING: Transaction %s verification FAILED", id)
 		}
 	}
+
+	log.Printf("🔵 MINING: Collected %d valid transactions from mempool", len(txs))
 
 	// Get current height for coinbase reward calculation
 	newHeight := s.Blockchain.GetBestHeight() + 1

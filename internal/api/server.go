@@ -242,6 +242,8 @@ func (s *Server) handleGetBlockByHash(w http.ResponseWriter, r *http.Request) {
 // handleSend creates and broadcasts a new transaction
 // POST /api/send
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("=== HANDLER SEND CALLED ===")
+
 	if r.Method != http.MethodPost {
 		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -278,23 +280,35 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("🔵 API: Received send request - From: %s, To: %s, Amount: %d", req.From, req.To, req.Amount)
+
 	// Create transaction using addresses
 	tx := blockchain.NewTransaction(req.From, req.To, req.Amount, s.Blockchain)
 	if tx == nil {
+		log.Printf("❌ API: Transaction creation failed - insufficient funds")
 		s.sendError(w, "Failed to create transaction - insufficient funds", http.StatusBadRequest)
 		return
 	}
 
-	// Broadcast transaction to network if network server is available
+	log.Printf("✅ API: Transaction created successfully: %x", tx.ID)
+
+	// Add transaction to local mempool first
 	if s.NetworkServer != nil {
-		// Type assert to get the BroadcastTx method
-		type NetworkBroadcaster interface {
+		// Type assert to add to local mempool
+		type MempoolManager interface {
+			AddToMempool(tx *blockchain.Transaction)
 			BroadcastTx(tx *blockchain.Transaction)
 		}
-		if broadcaster, ok := s.NetworkServer.(NetworkBroadcaster); ok {
-			broadcaster.BroadcastTx(tx)
-			log.Printf("📤 Transaction broadcasted: %x", tx.ID)
+		if manager, ok := s.NetworkServer.(MempoolManager); ok {
+			manager.AddToMempool(tx)
+			log.Printf("📥 API: Added transaction to local mempool")
+			manager.BroadcastTx(tx)
+			log.Printf("📤 API: Transaction broadcasted: %x", tx.ID)
+		} else {
+			log.Printf("⚠️  API: NetworkServer does not implement required methods!")
 		}
+	} else {
+		log.Printf("⚠️  API: NetworkServer is nil - transaction will NOT be broadcasted!")
 	}
 
 	response := SendResponse{
@@ -302,6 +316,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		TxID:    fmt.Sprintf("%x", tx.ID),
 	}
 
+	log.Printf("🔵 API: Sending response to client")
 	s.sendJSON(w, response, http.StatusOK)
 }
 

@@ -54,14 +54,21 @@ Este projeto implementa os principais conceitos do Bitcoin:
 - Nós mineradores e regulares
 - Suporte a nó seed
 
-### 9. **CLI (Interface de Linha de Comando)**
-- Criar carteiras
-- Enviar transações
-- Verificar saldos
-- Imprimir blockchain
-- Reindexar UTXOs
-- Iniciar nós de rede
-- Gerenciar peers
+### 9. **API REST HTTP**
+
+- Criar carteiras (`POST /api/createwallet`)
+- Enviar transações (`POST /api/send`)
+- Verificar saldos (`GET /api/balance/:address`)
+- Info da rede (`GET /api/networkinfo`)
+- Listar endereços (`GET /api/addresses`)
+- Ver último bloco (`GET /api/lastblock`)
+- Health check (`GET /health`)
+
+### 10. **CLI (Interface de Linha de Comando)**
+
+- Iniciar nós de rede (`startnode`)
+- Criar blockchain (`createblockchain`)
+- Gerenciamento básico de carteiras (`createwallet`, `listaddresses`)
 
 ## 🏗️ Estrutura do Projeto
 
@@ -71,28 +78,47 @@ Seguindo o [golang-standards/project-layout](https://github.com/golang-standards
 blockchain-go/
 ├── cmd/
 │   └── blockchain/          # Ponto de entrada da aplicação
-│       └── main.go          # Implementação da CLI
+│       └── main.go          # Inicialização e comandos básicos
 ├── internal/
-│   ├── blockchain/          # Código privado da aplicação
-│   │   ├── base58.go        # Codificação Base58 (Bitcoin)
-│   │   ├── block.go         # Estrutura de bloco
-│   │   ├── blockchain.go    # Blockchain principal
-│   │   ├── merkle.go        # Implementação da Merkle Tree
-│   │   ├── proof.go         # Proof of Work
-│   │   ├── transaction.go   # Sistema de transações
-│   │   ├── utxo.go          # Sistema UTXO
+│   ├── api/                 # Servidor HTTP API
+│   │   └── server.go        # Endpoints REST (balance, send, network info, etc.)
+│   ├── blockchain/          # Lógica core da blockchain
+│   │   ├── base58.go        # Codificação Base58 (estilo Bitcoin)
+│   │   ├── block.go         # Estrutura de bloco com PoW e transações
+│   │   ├── blockchain.go    # Blockchain com persistência (LevelDB)
+│   │   ├── config.go        # Constantes de configuração (dificuldade, rewards, etc.)
+│   │   ├── merkle.go        # Merkle Tree para hash de transações
+│   │   ├── proof.go         # Algoritmo Proof of Work
+│   │   ├── transaction.go   # Sistema de transações com assinaturas ECDSA
+│   │   ├── utxo.go          # Gerenciamento do conjunto UTXO
 │   │   ├── utils.go         # Funções utilitárias
-│   │   └── wallet.go        # Sistema de carteiras
+│   │   └── wallet.go        # Gerenciamento de carteiras e endereços
 │   └── network/             # Camada de rede P2P
-│       ├── peer.go          # Gerenciamento de peers
-│       ├── protocol.go      # Protocolo de rede
-│       └── server.go        # Servidor de rede
-├── build/                   # Artefatos de build
-├── docs/                    # Documentação
-├── scripts/                 # Scripts de build e demo
-├── go.mod                   # Módulos Go
+│       ├── peer.go          # Gerenciamento de conexões de peers
+│       ├── protocol.go      # Mensagens do protocolo de rede
+│       └── server.go        # Servidor P2P, mempool, coordenação de mineração
+├── build/                   # Binários compilados
+├── docs/                    # Documentação detalhada
+│   ├── ARCHITECTURE.md      # Arquitetura do sistema
+│   ├── BITCOIN_COMPARISON.md # Comparação com Bitcoin
+│   ├── HALVING_AND_SUPPLY.md # Modelo econômico e supply
+│   ├── MINING.md            # Mecânicas de mineração
+│   ├── NETWORK.md           # Detalhes do protocolo de rede
+│   └── ...                  # Versões em português (*.pt-br.md)
+├── scripts/                 # Scripts utilitários
+│   ├── check-balances.sh    # Verificar saldos de todos os nós
+│   ├── check-lastblock.sh   # Verificar altura da blockchain de todos os nós
+│   ├── network-status.sh    # Dashboard de status da rede
+│   ├── docker-test.sh       # Teste automatizado da rede Docker
+│   └── demo.sh              # Script de demonstração rápida
+├── docker-compose.yml       # Setup de rede multi-nó Docker
+├── Dockerfile               # Definição de imagem do container
+├── go.mod                   # Dependências de módulos Go
+├── go.sum                   # Checksums de módulos Go
 ├── Makefile                 # Automação de build
-└── README.md               # Este arquivo
+├── LICENSE                  # Licença MIT
+├── README.md                # README em inglês
+└── README.pt-br.md         # Este arquivo
 ```
 
 ## 🚀 Começando
@@ -100,143 +126,171 @@ blockchain-go/
 ### Pré-requisitos
 
 - Go 1.22 ou superior
-- Make (opcional, mas recomendado)
-- Docker & Docker Compose (para testes de rede)
+- Docker & Docker Compose (para testes multi-nó)
 
-### Instalação
+### Quick Start (Docker - Recomendado)
+
+A rede Docker já vem pré-configurada com 4 nós e é a forma mais fácil de testar:
 
 ```bash
 # Clone o repositório
 git clone https://github.com/marcocsrachid/blockchain-go.git
 cd blockchain-go
 
-# Instale as dependências
-make deps
+# Build e inicie a rede (4 nós: 1 seed, 2 miners, 1 regular)
+docker-compose build
+docker-compose up -d
 
-# Compile o projeto
-make build
+# Verifique o status
+docker-compose ps
+
+# Veja os logs
+docker-compose logs -f
 ```
 
-### Uso
+**Portas expostas:**
+- `4000` - Seed Node (API HTTP)
+- `4001` - Miner 1 (API HTTP)
+- `4002` - Miner 2 (API HTTP)
+- `4003` - Regular Node (API HTTP)
 
-#### Criar uma Carteira
+**Scripts úteis:**
+```bash
+# Status completo da rede
+./scripts/network-status.sh
+
+# Verificar altura dos blocos
+./scripts/check-lastblock.sh
+
+# Verificar saldos
+./scripts/check-balances.sh
+```
+
+### Build Manual (Local)
+
+Se você quiser compilar e executar localmente:
+
+#### 1. Build do binário
 
 ```bash
+# Build padrão
+go build -o build/blockchain cmd/blockchain/main.go
+
+# Ou build estático (para Docker Alpine)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix netgo -ldflags '-s -w' -o build/blockchain cmd/blockchain/main.go
+```
+
+#### 2. Criar wallet e blockchain
+
+```bash
+# Criar uma wallet (anote o endereço gerado)
 ./build/blockchain createwallet
-```
 
-Exemplo de saída:
-```
-New address is: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
-```
-
-#### Listar Endereços
-
-```bash
-./build/blockchain listaddresses
-```
-
-#### Criar a Blockchain
-
-Crie a blockchain e envie a recompensa do bloco genesis para um endereço:
-
-```bash
-./build/blockchain createblockchain -address SEU_ENDEREÇO
-```
-
-#### Verificar Saldo
-
-```bash
-./build/blockchain getbalance -address SEU_ENDEREÇO
-```
-
-#### Enviar Transação
-
-```bash
-./build/blockchain send -from ENDEREÇO_ORIGEM -to ENDEREÇO_DESTINO -amount 10
-```
-
-#### Ver a Blockchain
-
-```bash
-./build/blockchain printchain
-```
-
-#### Reindexar UTXOs
-
-```bash
-./build/blockchain reindexutxo
-```
-
-### Comandos de Rede 🌐
-
-#### Iniciar um Nó
-
-Iniciar nó minerador:
-```bash
-./build/blockchain startnode -port 3000 -miner SEU_ENDEREÇO
-```
-
-Iniciar nó regular (não minerador):
-```bash
-./build/blockchain startnode -port 3000
-```
-
-#### Gerenciar Peers
-
-Adicionar um peer:
-```bash
-./build/blockchain addpeer -address localhost:3001
-```
-
-Listar peers conhecidos:
-```bash
-./build/blockchain peers
-```
-
-### Testes de Rede com Docker
-
-#### Início Rápido
-
-```bash
-# Compile e inicie rede com 4 nós
-make docker-build
-make docker-up
-
-# Ver logs
-make docker-logs
-
-# Parar rede
-make docker-down
-```
-
-#### Teste Completo com Docker
-
-```bash
-# Execute script de teste automatizado
-make docker-test
-```
-
-A configuração docker-compose inclui:
-- **Nó Seed** (porta 3000) - Nó seed não minerador
-- **Minerador 1** (porta 3001) - Nó minerador
-- **Minerador 2** (porta 3002) - Nó minerador
-- **Nó Regular** (porta 3003) - Nó não minerador
-
-#### Executar Comandos nos Containers
-
-```bash
 # Listar endereços
-docker exec -it blockchain-seed /app/blockchain listaddresses
+./build/blockchain listaddresses
+
+# Criar a blockchain com endereço de recompensa
+./build/blockchain createblockchain -address SEU_ENDERECO
+```
+
+#### 3. Startar um node
+
+**Node minerador (produz blocos):**
+```bash
+# Terminal 1 - Seed/Miner Node
+NODE_ID=node1 ./build/blockchain startnode -port 3000 -miner SEU_ENDERECO
+```
+
+**Node regular (não minera):**
+```bash
+# Terminal 2 - Regular Node (conecta ao node1)
+NODE_ID=node2 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3001
+```
+
+**Variáveis de ambiente importantes:**
+- `NODE_ID` - ID único do node (define o diretório de dados)
+- `SEED_NODE` - Endereço do seed node para conectar
+- `-port` - Porta P2P do node (default: 3000)
+- `-apiport` - Porta da API HTTP (default: 4000)
+- `-miner` - Endereço para receber recompensas (ativa mineração)
+
+### Usando a API HTTP
+
+Todos os nodes expõem uma API REST:
+
+```bash
+# Verificar status da rede
+curl http://localhost:4000/api/networkinfo | jq
+
+# Listar endereços
+curl http://localhost:4000/api/addresses | jq
 
 # Verificar saldo
-docker exec -it blockchain-miner1 /app/blockchain getbalance -address <ENDEREÇO>
+curl http://localhost:4000/api/balance/SEU_ENDERECO | jq
 
-# Ver blockchain
-docker exec -it blockchain-seed /app/blockchain printchain
+# Criar nova wallet
+curl -X POST http://localhost:4000/api/createwallet | jq
+
+# Enviar transação
+curl -X POST http://localhost:4000/api/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "ENDERECO_ORIGEM",
+    "to": "ENDERECO_DESTINO",
+    "amount": 10
+  }' | jq
+
+# Ver último bloco
+curl http://localhost:4000/api/lastblock | jq
+
+# Listar peers conhecidos
+curl http://localhost:4000/api/peers | jq
 ```
 
-Veja [docs/NETWORK.pt-br.md](docs/NETWORK.pt-br.md) para documentação detalhada da rede.
+### Exemplo Completo (3 Nodes)
+
+```bash
+# Terminal 1 - Seed Node (não minera, apenas coordena)
+NODE_ID=seed ./build/blockchain createblockchain -address 1SeedAddress...
+NODE_ID=seed ./build/blockchain startnode -port 3000
+
+# Terminal 2 - Miner 1
+NODE_ID=miner1 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3001 -apiport 4001 -miner 1Miner1Address...
+
+# Terminal 3 - Miner 2
+NODE_ID=miner2 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3002 -apiport 4002 -miner 1Miner2Address...
+
+# Terminal 4 - Enviar transação via API
+curl -X POST http://localhost:4001/api/send \
+  -H "Content-Type: application/json" \
+  -d '{"from":"1Miner1Address...","to":"1Miner2Address...","amount":50}' | jq
+
+# Aguarde ~60-90s para mineração...
+
+# Verificar saldos
+curl http://localhost:4001/api/balance/1Miner1Address... | jq
+curl http://localhost:4002/api/balance/1Miner2Address... | jq
+```
+
+### Acessando Containers Docker
+
+```bash
+# Executar comandos dentro dos containers
+docker exec -it blockchain-seed /app/blockchain listaddresses
+docker exec -it blockchain-miner1 /app/blockchain listaddresses
+
+# Ver logs de um node específico
+docker-compose logs -f node-seed
+docker-compose logs -f node-miner1
+
+# Parar a rede
+docker-compose down
+
+# Parar e limpar dados (reset completo)
+docker-compose down -v
+```
+
+📖 Para detalhes completos sobre a implementação de rede, veja [docs/NETWORK.md](docs/NETWORK.md) e [docs/NETWORK.pt-br.md](docs/NETWORK.pt-br.md)
 
 ## 📖 Conceitos do Bitcoin Implementados
 
@@ -297,22 +351,35 @@ type Transaction struct {
 
 ## 🎯 Comparação com o Bitcoin
 
-| Funcionalidade | Bitcoin | Este Projeto |
-|---------------|---------|--------------|
-| Proof of Work | ✅ | ✅ |
-| Merkle Tree | ✅ | ✅ |
-| UTXO Model | ✅ | ✅ |
-| ECDSA | secp256k1 | P256 |
-| Base58 | ✅ | ✅ |
-| Endereços | ✅ | ✅ |
-| Transações | ✅ | ✅ (simplificado) |
-| Rede P2P | ✅ | ✅ (básico) |
-| Mempool | ✅ | ✅ |
-| Scripts | ✅ | ❌ |
-| Ajuste de Dificuldade | ✅ | ❌ |
-| Halving | ✅ | ❌ |
+| Funcionalidade | Bitcoin | Este Projeto | Status |
+|---------------|---------|--------------|--------|
+| Proof of Work | ✅ | ✅ | Implementado |
+| Merkle Tree | ✅ | ✅ | Implementado |
+| UTXO Model | ✅ | ✅ | Implementado |
+| ECDSA | secp256k1 | P256 | Implementado (curva diferente) |
+| Base58 | ✅ | ✅ | Implementado |
+| Endereços | ✅ | ✅ | Implementado |
+| Transações | ✅ | ✅ | Implementado (simplificado) |
+| Rede P2P | ✅ Completa | ✅ Básica | Implementado (sem DNS seeds) |
+| Mempool | ✅ | ✅ | Implementado (sem RBF) |
+| HTTP API | ❌ | ✅ | Extra: REST API |
+| Scripts | ✅ | ❌ | Não implementado |
+| Ajuste Dificuldade | ✅ A cada 2016 blocos | ❌ Fixa | Simplificado |
+| Halving | ✅ | ✅ | Implementado |
 
-**Similaridade geral: ~95%** com conceitos fundamentais
+**Similaridade com Bitcoin: ~93%** dos conceitos fundamentais
+
+### Diferenças Principais
+
+1. **Dificuldade Fixa**: Não ajusta automaticamente a cada 2016 blocos
+2. **Halving Simplificado**: Implementado mas sem complexidade de ajuste
+3. **P2P Básico**: Sem DNS seeds, descoberta manual de peers
+4. **Sem Scripts**: Não usa linguagem Script para condições de gasto
+5. **Mempool Básico**: Sem priority fees ou Replace-By-Fee (RBF)
+6. **Sem SPV**: Simplified Payment Verification não implementado
+7. **Sem SegWit**: Segregated Witness não implementado
+8. **Sem Lightning**: Lightning Network não implementado
+9. **API REST**: Extra não presente no Bitcoin Core (tem RPC)
 
 ## 📂 Documentação
 

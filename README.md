@@ -60,15 +60,21 @@ This project implements the main Bitcoin concepts:
 - Mining nodes and regular nodes
 - Seed node support
 
-### 9. **CLI (Command Line Interface)**
+### 9. **HTTP REST API**
 
-- Create wallets
-- Send transactions
-- Check balances
-- Print blockchain
-- Reindex UTXOs
-- Start network nodes
-- Manage peers
+- Create wallets (`POST /api/createwallet`)
+- Send transactions (`POST /api/send`)
+- Check balances (`GET /api/balance/:address`)
+- Network info (`GET /api/networkinfo`)
+- List addresses (`GET /api/addresses`)
+- View last block (`GET /api/lastblock`)
+- Health check (`GET /health`)
+
+### 10. **CLI (Command Line Interface)**
+
+- Start network nodes (`startnode`)
+- Create blockchain (`createblockchain`)
+- Basic wallet management (`createwallet`, `listaddresses`)
 
 ## 🏗️ Project Structure
 
@@ -78,28 +84,47 @@ Following the [golang-standards/project-layout](https://github.com/golang-standa
 blockchain-go/
 ├── cmd/
 │   └── blockchain/          # Main application entry point
-│       └── main.go          # CLI implementation
+│       └── main.go          # Application startup and basic commands
 ├── internal/
-│   ├── blockchain/          # Private application code
-│   │   ├── base58.go        # Base58 encoding (Bitcoin)
-│   │   ├── block.go         # Block structure with transactions
-│   │   ├── blockchain.go    # Main blockchain with UTXO
-│   │   ├── merkle.go        # Merkle Tree implementation
-│   │   ├── proof.go         # Proof of Work
-│   │   ├── transaction.go   # Transaction system
-│   │   ├── utxo.go          # UTXO system
+│   ├── api/                 # HTTP API server
+│   │   └── server.go        # REST API endpoints (balance, send, network info, etc.)
+│   ├── blockchain/          # Core blockchain logic
+│   │   ├── base58.go        # Base58 encoding (Bitcoin-style)
+│   │   ├── block.go         # Block structure with PoW and transactions
+│   │   ├── blockchain.go    # Blockchain with persistence (LevelDB)
+│   │   ├── config.go        # Configuration constants (difficulty, rewards, etc.)
+│   │   ├── merkle.go        # Merkle Tree for transaction hashing
+│   │   ├── proof.go         # Proof of Work algorithm
+│   │   ├── transaction.go   # Transaction system with ECDSA signatures
+│   │   ├── utxo.go          # UTXO set management
 │   │   ├── utils.go         # Utility functions
-│   │   └── wallet.go        # Wallet system
+│   │   └── wallet.go        # Wallet and address management
 │   └── network/             # P2P network layer
-│       ├── peer.go          # Peer management
-│       ├── protocol.go      # Network protocol
-│       └── server.go        # Network server
-├── build/                   # Build artifacts
-├── docs/                    # Documentation
-├── scripts/                 # Build and demo scripts
-├── go.mod                   # Go modules
+│       ├── peer.go          # Peer connection management
+│       ├── protocol.go      # Network protocol messages
+│       └── server.go        # P2P server, mempool, mining coordination
+├── build/                   # Compiled binaries
+├── docs/                    # Detailed documentation
+│   ├── ARCHITECTURE.md      # System architecture
+│   ├── BITCOIN_COMPARISON.md # How it compares to Bitcoin
+│   ├── HALVING_AND_SUPPLY.md # Economics and supply model
+│   ├── MINING.md            # Mining mechanics
+│   ├── NETWORK.md           # Network protocol details
+│   └── ...                  # Portuguese versions (*.pt-br.md)
+├── scripts/                 # Utility scripts
+│   ├── check-balances.sh    # Check balances across all nodes
+│   ├── check-lastblock.sh   # Check blockchain height of all nodes
+│   ├── network-status.sh    # Network status dashboard
+│   ├── docker-test.sh       # Automated Docker network test
+│   └── demo.sh              # Quick demo script
+├── docker-compose.yml       # Multi-node Docker network setup
+├── Dockerfile               # Container image definition
+├── go.mod                   # Go module dependencies
+├── go.sum                   # Go module checksums
 ├── Makefile                 # Build automation
-└── README.md               # This file
+├── LICENSE                  # MIT License
+├── README.md                # This file (English)
+└── README.pt-br.md         # Portuguese README
 ```
 
 ## 🚀 Getting Started
@@ -107,149 +132,176 @@ blockchain-go/
 ### Prerequisites
 
 - Go 1.22 or higher
-- Make (optional, but recommended)
-- Docker & Docker Compose (for network testing)
+- Docker & Docker Compose (for multi-node testing)
 
-### Installation
+### Quick Start (Docker - Recommended)
+
+The Docker network comes pre-configured with 4 nodes and is the easiest way to test:
 
 ```bash
 # Clone the repository
 git clone https://github.com/marcocsrachid/blockchain-go.git
 cd blockchain-go
 
-# Install dependencies
-make deps
+# Build and start the network (4 nodes: 1 seed, 2 miners, 1 regular)
+docker-compose build
+docker-compose up -d
 
-# Build the project
-make build
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
 ```
 
-### Usage
+**Exposed ports:**
 
-#### Create a Wallet
+- `4000` - Seed Node (HTTP API)
+- `4001` - Miner 1 (HTTP API)
+- `4002` - Miner 2 (HTTP API)
+- `4003` - Regular Node (HTTP API)
+
+**Useful scripts:**
 
 ```bash
+# Complete network status
+./scripts/network-status.sh
+
+# Check block heights
+./scripts/check-lastblock.sh
+
+# Check balances
+./scripts/check-balances.sh
+```
+
+### Manual Build (Local)
+
+If you want to compile and run locally:
+
+#### 1. Build the binary
+
+```bash
+# Standard build
+go build -o build/blockchain cmd/blockchain/main.go
+
+# Or static build (for Docker Alpine)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix netgo -ldflags '-s -w' -o build/blockchain cmd/blockchain/main.go
+```
+
+#### 2. Create wallet and blockchain
+
+```bash
+# Create a wallet (note the generated address)
 ./build/blockchain createwallet
-```
 
-Output example:
-
-```
-New address is: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
-```
-
-#### List Addresses
-
-```bash
+# List addresses
 ./build/blockchain listaddresses
-```
 
-#### Create the Blockchain
-
-Create the blockchain and send the genesis block reward to an address:
-
-```bash
+# Create the blockchain with reward address
 ./build/blockchain createblockchain -address YOUR_ADDRESS
 ```
 
-#### Check Balance
+#### 3. Start a node
+
+**Mining node (produces blocks):**
 
 ```bash
-./build/blockchain getbalance -address YOUR_ADDRESS
+# Terminal 1 - Seed/Miner Node
+NODE_ID=node1 ./build/blockchain startnode -port 3000 -miner YOUR_ADDRESS
 ```
 
-#### Send Transaction
+**Regular node (non-mining):**
 
 ```bash
-./build/blockchain send -from FROM_ADDRESS -to TO_ADDRESS -amount 10
+# Terminal 2 - Regular Node (connects to node1)
+NODE_ID=node2 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3001
 ```
 
-#### View the Blockchain
+**Important environment variables:**
+
+- `NODE_ID` - Unique node ID (defines data directory)
+- `SEED_NODE` - Seed node address to connect to
+- `-port` - Node P2P port (default: 3000)
+- `-apiport` - HTTP API port (default: 4000)
+- `-miner` - Address to receive mining rewards (enables mining)
+
+### Using the HTTP API
+
+All nodes expose a REST API:
 
 ```bash
-./build/blockchain printchain
-```
+# Check network status
+curl http://localhost:4000/api/networkinfo | jq
 
-#### Reindex UTXOs
-
-```bash
-./build/blockchain reindexutxo
-```
-
-### Network Commands 🌐
-
-#### Start a Node
-
-Start a mining node:
-
-```bash
-./build/blockchain startnode -port 3000 -miner YOUR_ADDRESS
-```
-
-Start a regular (non-mining) node:
-
-```bash
-./build/blockchain startnode -port 3000
-```
-
-#### Manage Peers
-
-Add a peer:
-
-```bash
-./build/blockchain addpeer -address localhost:3001
-```
-
-List known peers:
-
-```bash
-./build/blockchain peers
-```
-
-### Docker Network Testing
-
-#### Quick Start
-
-```bash
-# Build and start 4-node network
-make docker-build
-make docker-up
-
-# View logs
-make docker-logs
-
-# Stop network
-make docker-down
-```
-
-#### Full Docker Test
-
-```bash
-# Run automated test script
-make docker-test
-```
-
-The docker-compose setup includes:
-
-- **Seed Node** (port 3000) - Non-mining seed node
-- **Miner 1** (port 3001) - Mining node
-- **Miner 2** (port 3002) - Mining node
-- **Regular Node** (port 3003) - Non-mining node
-
-#### Execute Commands in Containers
-
-```bash
 # List addresses
-docker exec -it blockchain-seed /app/blockchain listaddresses
+curl http://localhost:4000/api/addresses | jq
 
 # Check balance
-docker exec -it blockchain-miner1 /app/blockchain getbalance -address <ADDRESS>
+curl http://localhost:4000/api/balance/YOUR_ADDRESS | jq
 
-# View blockchain
-docker exec -it blockchain-seed /app/blockchain printchain
+# Create new wallet
+curl -X POST http://localhost:4000/api/createwallet | jq
+
+# Send transaction
+curl -X POST http://localhost:4000/api/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "FROM_ADDRESS",
+    "to": "TO_ADDRESS",
+    "amount": 10
+  }' | jq
+
+# View last block
+curl http://localhost:4000/api/lastblock | jq
+
+# List known peers
+curl http://localhost:4000/api/peers | jq
 ```
 
-See [docs/NETWORK.md](docs/NETWORK.md) for detailed network documentation.
+### Complete Example (3 Nodes)
+
+```bash
+# Terminal 1 - Seed Node (non-mining, coordinator only)
+NODE_ID=seed ./build/blockchain createblockchain -address 1SeedAddress...
+NODE_ID=seed ./build/blockchain startnode -port 3000
+
+# Terminal 2 - Miner 1
+NODE_ID=miner1 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3001 -apiport 4001 -miner 1Miner1Address...
+
+# Terminal 3 - Miner 2
+NODE_ID=miner2 SEED_NODE=localhost:3000 ./build/blockchain startnode -port 3002 -apiport 4002 -miner 1Miner2Address...
+
+# Terminal 4 - Send transaction via API
+curl -X POST http://localhost:4001/api/send \
+  -H "Content-Type: application/json" \
+  -d '{"from":"1Miner1Address...","to":"1Miner2Address...","amount":50}' | jq
+
+# Wait ~60-90s for mining...
+
+# Check balances
+curl http://localhost:4001/api/balance/1Miner1Address... | jq
+curl http://localhost:4002/api/balance/1Miner2Address... | jq
+```
+
+### Accessing Docker Containers
+
+```bash
+# Execute commands inside containers
+docker exec -it blockchain-seed /app/blockchain listaddresses
+docker exec -it blockchain-miner1 /app/blockchain listaddresses
+
+# View logs of a specific node
+docker-compose logs -f node-seed
+docker-compose logs -f node-miner1
+
+# Stop the network
+docker-compose down
+
+# Stop and clean data (complete reset)
+docker-compose down -v
+```
+
+📖 For complete network implementation details, see [docs/NETWORK.md](docs/NETWORK.md) and [docs/NETWORK.pt-br.md](docs/NETWORK.pt-br.md)
 
 ## 📖 Bitcoin Concepts Implemented
 
@@ -316,14 +368,16 @@ Bitcoin-like address generation process:
 
 This is an educational project. Some differences from real Bitcoin:
 
-1. **Fixed Difficulty**: Bitcoin adjusts difficulty every 2016 blocks
-2. **Fixed Reward**: Bitcoin halves reward every 210,000 blocks (halving)
-3. **P2P Network**: Not implemented (Bitcoin has complete network protocol)
-4. **Scripts**: Bitcoin uses Script language for spending conditions
-5. **Mempool**: Pending transaction pool not implemented
-6. **SPV**: Simplified Payment Verification not implemented
-7. **Segregated Witness**: Not implemented
-8. **Lightning Network**: Not implemented
+1. **Fixed Difficulty**: Bitcoin adjusts difficulty every 2016 blocks (this project has fixed difficulty)
+2. **Simplified Halving**: Bitcoin halves every 210,000 blocks; this project halves every 210,000 blocks but without adjustment complexity
+3. **Basic P2P**: Implemented but simpler than Bitcoin's full protocol
+4. **No Scripts**: Bitcoin uses Script language for spending conditions
+5. **Basic Mempool**: Implemented but without priority fees or RBF (Replace-By-Fee)
+6. **No SPV**: Simplified Payment Verification not implemented
+7. **No SegWit**: Segregated Witness not implemented
+8. **No Lightning**: Lightning Network not implemented
+9. **No DNS Seeds**: Manual peer management instead of DNS seed discovery
+10. **Simplified Consensus**: No orphan handling or chain reorganization
 
 ## 🛠️ Development
 
@@ -383,6 +437,7 @@ This project was created for educational purposes only and should not be used in
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ### What this means:
+
 - ✅ **Free to use** for learning, education, and commercial projects
 - ✅ **Free to modify** and adapt to your needs
 - ✅ **Free to distribute** and share
